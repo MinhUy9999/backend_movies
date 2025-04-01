@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { HTTP_STATUS_CODES } from "../httpStatus/httpStatusCode";
 import { isValidEmail, isValidPhoneNumber, isValidPassword, isValidDateOfBirth } from "../utils/validation";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
+import { generateWebSocketToken } from "../middlewares/auth.middleware"; // Import hàm tạo token WebSocket
 import { UserService } from "../services/user.service";
 import { responseSend } from "../config/response";
 
@@ -47,12 +48,24 @@ export class UserController {
 
             // Sửa thứ tự tham số: gender trước, username sau
             const user = await userService.register(email, password, phone, dateofbirth, gender, username, avatar);
-            const userPayload = { username: user.username, email: user.email, role: user.role };
+            const userPayload = { id: user.id, username: user.username, email: user.email, role: user.role };
             const accessToken = generateAccessToken(userPayload);
             const refreshToken = generateRefreshToken(userPayload);
+            
+            // Tạo token cho WebSocket
+            const wsToken = generateWebSocketToken(user.id, user.username, user.email, user.role);
 
             res.cookie("refreshToken", refreshToken, { httpOnly: true, secure: true, sameSite: "strict" });
-            responseSend(res, { user, accessToken }, "Đăng ký thành công", HTTP_STATUS_CODES.CREATED);
+            responseSend(
+                res, 
+                { 
+                    user, 
+                    accessToken,
+                    wsToken // Trả về token WebSocket cho client
+                }, 
+                "Đăng ký thành công", 
+                HTTP_STATUS_CODES.CREATED
+            );
         } catch (error: any) {
             console.error("Error registering user:", error.message);
             responseSend(
@@ -63,6 +76,7 @@ export class UserController {
             );
         }
     }
+
     // Phương thức đăng nhập người dùng
     static async login(req: Request, res: Response) {
         try {
@@ -76,17 +90,30 @@ export class UserController {
             }
 
             const user = await userService.login(email, password);
-            const userPayload = { username: user.username, email: user.email, role: user.role };
+            const userPayload = { id: user.id, username: user.username, email: user.email, role: user.role };
             const accessToken = generateAccessToken(userPayload);
             const refreshToken = generateRefreshToken(userPayload);
+            
+            // Tạo token cho WebSocket
+            const wsToken = generateWebSocketToken(user.id, user.username, user.email, user.role);
 
             res.cookie("refreshToken", refreshToken, { httpOnly: true, secure: true, sameSite: "strict" });
-            responseSend(res, { user, accessToken }, "Đăng nhập thành công", HTTP_STATUS_CODES.OK);
+            responseSend(
+                res, 
+                { 
+                    user, 
+                    accessToken,
+                    wsToken // Trả về token WebSocket cho client
+                }, 
+                "Đăng nhập thành công", 
+                HTTP_STATUS_CODES.OK
+            );
         } catch (error: any) {
             console.error("Error logging in:", error.message);
             responseSend(res, null, error.message || "Lỗi khi đăng nhập", HTTP_STATUS_CODES.UNAUTHORIZED);
         }
     }
+
     // Phương thức lấy tất cả người dùng
     static async getAllUsers(req: Request, res: Response) {
         try {
@@ -96,6 +123,7 @@ export class UserController {
             responseSend(res, null, error.message || "Lỗi khi lấy danh sách người dùng", HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR);
         }
     }
+
     // Phương thức làm mới token
     static async refreshToken(req: Request, res: Response) {
         try {
@@ -110,17 +138,69 @@ export class UserController {
             }
 
             const userPayload = {
+                id: decoded.id,
                 username: decoded.username,
                 email: decoded.email,
                 role: decoded.role,
             };
             const newAccessToken = generateAccessToken(userPayload);
+            
+            // Tạo token WebSocket mới
+            const wsToken = generateWebSocketToken(
+                decoded.id,
+                decoded.username,
+                decoded.email,
+                decoded.role
+            );
 
-            responseSend(res, { accessToken: newAccessToken }, "Làm mới token thành công", HTTP_STATUS_CODES.OK);
+            responseSend(
+                res, 
+                { 
+                    accessToken: newAccessToken,
+                    wsToken // Trả về token WebSocket mới
+                }, 
+                "Làm mới token thành công", 
+                HTTP_STATUS_CODES.OK
+            );
         } catch (error: any) {
             responseSend(res, null, error.message || "Lỗi khi làm mới token", HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR);
         }
     }
+
+    // Phương thức lấy token WebSocket (endpoint mới)
+    static async getWebSocketToken(req: Request, res: Response) {
+        try {
+            // Lấy thông tin người dùng từ request (đã được xác thực qua middleware)
+            const user = req.user;
+            
+            if (!user || !user.id) {
+                return responseSend(res, null, "Không thể xác thực người dùng", HTTP_STATUS_CODES.UNAUTHORIZED);
+            }
+            
+            // Tạo token WebSocket
+            const wsToken = generateWebSocketToken(
+                user.id,
+                user.username,
+                user.email,
+                user.role
+            );
+            
+            responseSend(
+                res, 
+                { wsToken },
+                "Tạo token WebSocket thành công", 
+                HTTP_STATUS_CODES.OK
+            );
+        } catch (error: any) {
+            responseSend(
+                res, 
+                null, 
+                error.message || "Lỗi khi tạo token WebSocket", 
+                HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
     // Phương thức xử lý yêu cầu quên mật khẩu
     static async forgotPassword(req: Request, res: Response) {
         try {
@@ -156,6 +236,7 @@ export class UserController {
             responseSend(res, null, error.message || "Lỗi khi đặt lại mật khẩu", HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR);
         }
     }
+
     // Lấy thông tin người dùng theo ID
     static async getUserById(req: Request, res: Response) {
         try {
