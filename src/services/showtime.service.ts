@@ -3,8 +3,8 @@
 import { IShowtime } from '../models/showtime.model';
 import { ShowtimeRepository } from '../patterns/repository/ShowtimeRepository';
 import { MovieRepository } from '../patterns/repository/MovieRepository';
-import { Seat, ISeat } from '../models/seat.model';
-import { webSocketManager } from '../patterns/singleton/WebSocketManager'; // Import WebSocketManager
+import { Seat, ISeat } from '../models/seat.model'; // Changed from SeatReservation
+import webSocketManager from '../patterns/singleton/WebSocketManager'; // Import WebSocketManager singleton instance
 
 export class ShowtimeService {
   private showtimeRepository: ShowtimeRepository;
@@ -67,17 +67,6 @@ export class ShowtimeService {
     // Initialize seat availability for this showtime
     if (newShowtime._id) {
       await this.initializeSeatAvailability(newShowtime._id.toString(), showtimeData.screenId.toString());
-      
-      // Thông báo qua WebSocket về suất chiếu mới
-      const showtimeInfo = {
-        id: newShowtime._id,
-        movieId: newShowtime.movieId,
-        screenId: newShowtime.screenId,
-        startTime: newShowtime.startTime,
-        endTime: newShowtime.endTime,
-        price: newShowtime.price
-      };
-      webSocketManager.notifyShowtimeUpdated(newShowtime._id.toString(), showtimeInfo);
     }
 
     return newShowtime;
@@ -117,23 +106,7 @@ export class ShowtimeService {
       }
     }
 
-    const updatedShowtime = await this.showtimeRepository.update(id, showtimeData);
-    
-    // Nếu cập nhật thành công, thông báo qua WebSocket
-    if (updatedShowtime) {
-      const showtimeInfo = {
-        id: updatedShowtime._id,
-        movieId: updatedShowtime.movieId,
-        screenId: updatedShowtime.screenId,
-        startTime: updatedShowtime.startTime,
-        endTime: updatedShowtime.endTime,
-        price: updatedShowtime.price,
-        isActive: updatedShowtime.isActive
-      };
-      webSocketManager.notifyShowtimeUpdated(id, showtimeInfo);
-    }
-
-    return updatedShowtime;
+    return await this.showtimeRepository.update(id, showtimeData);
   }
 
   async deleteShowtime(id: string): Promise<boolean> {
@@ -145,33 +118,12 @@ export class ShowtimeService {
 
     if (bookedSeats.length > 0) {
       // If there are bookings, don't allow deletion - just mark inactive
-      const updated = await this.showtimeRepository.update(id, { isActive: false });
-      
-      // Thông báo qua WebSocket
-      if (updated) {
-        webSocketManager.notifyShowtimeUpdated(id, {
-          id: updated._id,
-          isActive: false,
-          message: "Showtime has been deactivated"
-        });
-      }
-      
+      await this.showtimeRepository.update(id, { isActive: false });
       return true;
     }
 
     // Otherwise actually delete
-    const result = await this.showtimeRepository.delete(id);
-    
-    // Thông báo qua WebSocket nếu xóa thành công
-    if (result) {
-      webSocketManager.notifyShowtimeUpdated(id, {
-        id: id,
-        deleted: true,
-        message: "Showtime has been deleted"
-      });
-    }
-    
-    return result;
+    return await this.showtimeRepository.delete(id);
   }
 
   async getShowtimeSeats(showtimeId: string): Promise<any[]> {

@@ -1,4 +1,4 @@
-// Cập nhật BookingService để hỗ trợ bộ đếm thời gian
+// Service Layer Pattern for Booking Business Logic
 
 import mongoose from 'mongoose';
 import { IBooking } from '../models/booking.model';
@@ -8,8 +8,8 @@ import { Seat } from '../models/seat.model';
 import { TicketFactory } from '../patterns/factory/TicketFactory';
 import { PaymentProcessor } from '../patterns/strategy/PaymentStrategy';
 import { NotificationService, NotificationData } from '../patterns/observer/NotificationSystem';
-import { webSocketManager } from '../patterns/singleton/WebSocketManager';
 import { UserService } from './user.service';
+import webSocketManager from '../patterns/singleton/WebSocketManager';
 
 interface BookingRequest {
   userId: string;
@@ -24,7 +24,6 @@ export class BookingService {
   private showtimeRepository: ShowtimeRepository;
   private userService: UserService;
   private notificationService: NotificationService;
-  private readonly BOOKING_TIMEOUT_MINUTES = 15; // Thời gian hết hạn đặt vé: 15 phút
 
   constructor() {
     this.bookingRepository = new BookingRepository();
@@ -57,7 +56,7 @@ export class BookingService {
         throw new Error('This showtime has already started');
       }
 
-      // Check if seats are available
+      // Check if seats are available - using Seat model directly instead of SeatReservation
       const seatAvailability = await Seat.find({
         _id: { $in: bookingRequest.seatIds },
         showtimeId: bookingRequest.showtimeId,
@@ -71,7 +70,7 @@ export class BookingService {
       // Calculate total amount
       let totalAmount = 0;
       for (const seatId of bookingRequest.seatIds) {
-        // Get seat type
+        // Get seat type (would need to query seat details in a real implementation)
         const seatData = await Seat.findById(seatId);
         const seatType = seatData ? seatData.seatType : 'standard';
         
@@ -83,10 +82,6 @@ export class BookingService {
         
         totalAmount += ticket.price;
       }
-
-      // Tính thời gian hết hạn đặt vé
-      const expiresAt = new Date();
-      expiresAt.setMinutes(expiresAt.getMinutes() + this.BOOKING_TIMEOUT_MINUTES);
 
       // Create a new booking with pending payment status
       const booking = await this.bookingRepository.create({
@@ -102,14 +97,33 @@ export class BookingService {
 
       await session.commitTransaction();
 
-      // Gửi thông báo qua Observer Pattern 
+      // Start WebSocket booking timer
+      try {
+        if (booking && booking._id) {
+          const bookingId: string = typeof booking._id === 'object' 
+            ? booking._id.toString() 
+            : String(booking._id);
+            
+          webSocketManager.startBookingTimer(bookingRequest.userId, bookingId);
+          webSocketManager.notifySeatsUpdated(bookingRequest.showtimeId);
+        }
+      } catch (wsError) {
+        console.error('WebSocket Error:', wsError);
+        // Don't fail the operation if WebSocket notification fails
+      }
+
+      // Send notification
       const user = await this.userService.getUserById(bookingRequest.userId);
       if (user) {
+        const bookingId: string = booking && booking._id 
+          ? (typeof booking._id === 'object' ? booking._id.toString() : String(booking._id)) 
+          : '';
+          
         const notificationData: NotificationData = {
           userId: user.id.toString(),
           email: user.email,
           phone: user.phone,
-          bookingId: booking._id ? booking._id.toString() : '',
+          bookingId: bookingId,
           movieTitle: showtime.movieId ? (showtime.movieId as any).title : 'Movie',
           theaterName: showtime.screenId ? 
             ((showtime.screenId as any).theaterId ? (showtime.screenId as any).theaterId.name : 'Theater') 
@@ -121,24 +135,6 @@ export class BookingService {
 
         await this.notificationService.notify('booking.created', notificationData);
       }
-
-      // Khởi động bộ đếm thời gian cho đặt vé
-      webSocketManager.startBookingTimer(
-        booking._id.toString(), 
-        bookingRequest.showtimeId, 
-        expiresAt
-      );
-
-      // Thông báo qua WebSocket
-      const bookingInfo = {
-        id: booking._id,
-        seats: bookingRequest.seatIds,
-        status: booking.bookingStatus,
-        createdAt: booking.bookedAt,
-        expiresAt: expiresAt,
-        timeoutMinutes: this.BOOKING_TIMEOUT_MINUTES
-      };
-      webSocketManager.notifyBookingCreated(bookingRequest.showtimeId, bookingInfo);
 
       return booking;
     } catch (error: any) {
@@ -163,7 +159,7 @@ export class BookingService {
       // Process the payment using Strategy Pattern
       const paymentResult = await paymentProcessor.processPayment(
         booking.totalAmount,
-        'VND',
+        'VND', // Currency - would be configurable in a real implementation
         paymentDetails
       );
 
@@ -176,6 +172,19 @@ export class BookingService {
         throw new Error(`Payment failed: ${paymentResult.message}`);
       }
 
+      // Stop the WebSocket booking timer
+      try {
+        if (booking.userId) {
+          const userId: string = typeof booking.userId === 'object'
+            ? booking.userId.toString()
+            : String(booking.userId);
+            
+          webSocketManager.stopBookingTimer(userId, bookingId);
+        }
+      } catch (wsError) {
+        console.error('WebSocket Error:', wsError);
+      }
+
       // Update booking with successful payment
       const updatedBooking = await this.bookingRepository.update(bookingId, {
         paymentStatus: 'completed',
@@ -183,22 +192,36 @@ export class BookingService {
         transactionId: paymentResult.transactionId
       });
 
-      // Confirm the booking
+      // Confirm the booking (update seat statuses)
       await this.bookingRepository.confirmBooking(bookingId);
 
-      // Dừng bộ đếm thời gian (vì đã thanh toán thành công)
-      webSocketManager.stopBookingTimer(bookingId);
+      // Notify about seats update
+      try {
+        if (booking.showtimeId) {
+          const showtimeId: string = typeof booking.showtimeId === 'object'
+            ? booking.showtimeId.toString()
+            : String(booking.showtimeId);
+            
+          webSocketManager.notifySeatsUpdated(showtimeId);
+        }
+      } catch (wsError) {
+        console.error('WebSocket Error:', wsError);
+      }
 
-      // Send notification through Observer Pattern
+      // Send notification
       const showtime = await this.showtimeRepository.findById(booking.showtimeId.toString());
       const user = await this.userService.getUserById(booking.userId.toString());
       
       if (user) {
+        const bookingIdStr: string = booking._id ? 
+          (typeof booking._id === 'object' ? booking._id.toString() : String(booking._id)) 
+          : '';
+            
         const notificationData: NotificationData = {
           userId: user.id.toString(),
           email: user.email,
           phone: user.phone,
-          bookingId: booking._id ? booking._id.toString() : '',
+          bookingId: bookingIdStr,
           movieTitle: showtime?.movieId ? (showtime.movieId as any).title : 'Movie',
           amount: booking.totalAmount,
           transactionId: paymentResult.transactionId
@@ -208,27 +231,20 @@ export class BookingService {
         await this.notificationService.notify('booking.confirmed', notificationData);
       }
 
-      // Thông báo qua WebSocket
-      if (updatedBooking && showtime) {
-        const bookingInfo = {
-          id: updatedBooking._id,
-          status: 'confirmed',
-          paymentStatus: 'completed',
-          transactionId: paymentResult.transactionId
-        };
-        webSocketManager.notifyBookingConfirmed(booking.showtimeId.toString(), bookingInfo);
-      }
-
       return updatedBooking!;
     } catch (error: any) {
       // Send failed payment notification
       const user = await this.userService.getUserById(booking.userId.toString());
       if (user) {
+        const bookingIdStr: string = booking._id ? 
+          (typeof booking._id === 'object' ? booking._id.toString() : String(booking._id)) 
+          : '';
+            
         const notificationData: NotificationData = {
           userId: user.id.toString(),
           email: user.email,
           phone: user.phone,
-          bookingId: booking._id ? booking._id.toString() : '',
+          bookingId: bookingIdStr,
           amount: booking.totalAmount
         };
 
@@ -250,7 +266,7 @@ export class BookingService {
       throw new Error('Unauthorized: You cannot cancel this booking');
     }
 
-    // Check if booking can be cancelled
+    // Check if booking can be cancelled (e.g., not too close to showtime)
     const showtime = await this.showtimeRepository.findById(booking.showtimeId.toString());
     if (!showtime) {
       throw new Error('Showtime information not available');
@@ -273,8 +289,12 @@ export class BookingService {
       });
     }
 
-    // Dừng bộ đếm thời gian (vì đặt vé đã bị hủy)
-    webSocketManager.stopBookingTimer(bookingId);
+    // Stop the WebSocket booking timer
+    try {
+      webSocketManager.stopBookingTimer(userId, bookingId);
+    } catch (wsError) {
+      console.error('WebSocket Error:', wsError);
+    }
 
     // Cancel the booking
     const cancelledBooking = await this.bookingRepository.cancelBooking(bookingId);
@@ -282,14 +302,31 @@ export class BookingService {
       throw new Error('Failed to cancel booking');
     }
 
+    // Notify about seats update
+    try {
+      if (booking.showtimeId) {
+        const showtimeId: string = typeof booking.showtimeId === 'object'
+          ? booking.showtimeId.toString()
+          : String(booking.showtimeId);
+          
+        webSocketManager.notifySeatsUpdated(showtimeId);
+      }
+    } catch (wsError) {
+      console.error('WebSocket Error:', wsError);
+    }
+
     // Send notification
     const user = await this.userService.getUserById(booking.userId.toString());
     if (user) {
+      const bookingIdStr: string = booking._id ? 
+        (typeof booking._id === 'object' ? booking._id.toString() : String(booking._id)) 
+        : '';
+          
       const notificationData: NotificationData = {
         userId: user.id.toString(),
         email: user.email,
         phone: user.phone,
-        bookingId: booking._id ? booking._id.toString() : '',
+        bookingId: bookingIdStr,
         movieTitle: showtime.movieId ? (showtime.movieId as any).title : 'Movie',
         theaterName: showtime.screenId ? 
           ((showtime.screenId as any).theaterId ? (showtime.screenId as any).theaterId.name : 'Theater') 
@@ -299,13 +336,6 @@ export class BookingService {
 
       await this.notificationService.notify('booking.cancelled', notificationData);
     }
-
-    // Thông báo qua WebSocket
-    const bookingInfo = {
-      id: booking._id,
-      status: 'cancelled'
-    };
-    webSocketManager.notifyBookingCancelled(booking.showtimeId.toString(), bookingInfo);
 
     return cancelledBooking;
   }
@@ -325,6 +355,7 @@ export class BookingService {
     }
 
     // Security check: Ensure the user owns this booking or is an admin
+    // In a real app, you'd check user roles
     if (booking.userId.toString() !== userId) {
       throw new Error('Unauthorized: You cannot view this booking');
     }

@@ -3,7 +3,7 @@
 import { IMovie } from '../models/movie.model';
 import { MovieRepository } from '../patterns/repository/MovieRepository';
 import { ShowtimeRepository } from '../patterns/repository/ShowtimeRepository';
-import { webSocketManager } from '../patterns/singleton/WebSocketManager'; // Import WebSocketManager
+import webSocketManager from '../patterns/singleton/WebSocketManager'; // Import WebSocketManager singleton instance
 
 export class MovieService {
   private movieRepository: MovieRepository;
@@ -59,24 +59,7 @@ export class MovieService {
       throw new Error('Release date cannot be after end date');
     }
 
-    const newMovie = await this.movieRepository.create(movieData);
-    
-    // Thông báo qua WebSocket
-    if (newMovie._id) {
-      webSocketManager.notifyMovieUpdated(newMovie._id.toString(), {
-        action: 'created',
-        movie: {
-          id: newMovie._id,
-          title: newMovie.title,
-          posterUrl: newMovie.posterUrl,
-          releaseDate: newMovie.releaseDate,
-          endDate: newMovie.endDate,
-          isActive: newMovie.isActive
-        }
-      });
-    }
-
-    return newMovie;
+    return await this.movieRepository.create(movieData);
   }
 
   async updateMovie(id: string, movieData: Partial<IMovie>): Promise<IMovie | null> {
@@ -92,24 +75,7 @@ export class MovieService {
       throw new Error('Release date cannot be after end date');
     }
 
-    const updatedMovie = await this.movieRepository.update(id, movieData);
-    
-    // Thông báo qua WebSocket nếu cập nhật thành công
-    if (updatedMovie) {
-      webSocketManager.notifyMovieUpdated(id, {
-        action: 'updated',
-        movie: {
-          id: updatedMovie._id,
-          title: updatedMovie.title,
-          posterUrl: updatedMovie.posterUrl,
-          releaseDate: updatedMovie.releaseDate,
-          endDate: updatedMovie.endDate,
-          isActive: updatedMovie.isActive
-        }
-      });
-    }
-
-    return updatedMovie;
+    return await this.movieRepository.update(id, movieData);
   }
 
   async deleteMovie(id: string): Promise<boolean> {
@@ -124,33 +90,11 @@ export class MovieService {
     // For this implementation, we'll use approach #2 (soft delete)
     if (showtimes.length > 0) {
       // Just mark as inactive instead of deleting
-      const updatedMovie = await this.movieRepository.update(id, { isActive: false });
-      
-      // Thông báo qua WebSocket
-      if (updatedMovie) {
-        webSocketManager.notifyMovieUpdated(id, {
-          action: 'deactivated',
-          movie: {
-            id: updatedMovie._id,
-            isActive: false
-          }
-        });
-      }
-      
+      await this.movieRepository.update(id, { isActive: false });
       return true;
     } else {
       // No showtimes, can safely delete
-      const deleted = await this.movieRepository.delete(id);
-      
-      // Thông báo qua WebSocket nếu xóa thành công
-      if (deleted) {
-        webSocketManager.notifyMovieUpdated(id, {
-          action: 'deleted',
-          movie: { id }
-        });
-      }
-      
-      return deleted;
+      return await this.movieRepository.delete(id);
     }
   }
 

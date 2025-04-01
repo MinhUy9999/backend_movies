@@ -1,5 +1,5 @@
 import { Seat, ISeat } from "../models/seat.model";
-import { webSocketManager } from "../patterns/singleton/WebSocketManager"; // Import WebSocketManager
+import webSocketManager from "../patterns/singleton/WebSocketManager";
 
 export class SeatService {
     static async getAllSeats(): Promise<ISeat[]> {
