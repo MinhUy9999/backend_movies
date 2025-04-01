@@ -5,8 +5,6 @@ import { authenticateToken, authorizeRoles } from "../middlewares/auth.middlewar
 
 const userRoutes = express.Router();
 
-const router = express.Router();
-
 userRoutes.post("/register", async (req: Request, res: Response) => {
     await UserController.register(req, res);
 });
@@ -27,6 +25,7 @@ userRoutes.post("/logout", (req: Request, res: Response) => {
     });
     res.json({ message: "Logout successful" });
 });
+
 // Endpoint gửi email quên mật khẩu
 userRoutes.post("/forgot-password", (req: Request, res: Response) => {
     UserController.forgotPassword(req, res);
@@ -36,8 +35,15 @@ userRoutes.post("/forgot-password", (req: Request, res: Response) => {
 userRoutes.post("/reset-password", (req: Request, res: Response) => {
     UserController.resetPassword(req, res);
 });
+
+// Get WebSocket token for real-time features
+userRoutes.get("/ws-token", authenticateToken, (req: Request, res: Response) => {
+    UserController.getWebSocketToken(req, res);
+});
+
 userRoutes.get("/:id", UserController.getUserById);  // Lấy thông tin user theo ID
 userRoutes.put("/:id", authenticateToken, authorizeRoles("admin"), UserController.updateUser);  // Cập nhật user
 userRoutes.delete("/:id", authenticateToken, authorizeRoles("admin"), UserController.deleteUser);  // Xóa user
 userRoutes.get("/users", authenticateToken, authorizeRoles("admin"), UserController.getAllUsers);
+
 export default userRoutes;

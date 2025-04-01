@@ -4,6 +4,7 @@ import { IShowtime } from '../models/showtime.model';
 import { ShowtimeRepository } from '../patterns/repository/ShowtimeRepository';
 import { MovieRepository } from '../patterns/repository/MovieRepository';
 import { Seat, ISeat } from '../models/seat.model'; // Changed from SeatReservation
+import webSocketManager from '../patterns/singleton/WebSocketManager'; // Import WebSocketManager singleton instance
 
 export class ShowtimeService {
   private showtimeRepository: ShowtimeRepository;

@@ -3,10 +3,15 @@ import { Request, Response } from "express";
 import { HTTP_STATUS_CODES } from "../httpStatus/httpStatusCode";
 import { isValidEmail, isValidPhoneNumber, isValidPassword, isValidDateOfBirth } from "../utils/validation";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
+import { generateWebSocketToken } from "../middlewares/auth.middleware";
 import { UserService } from "../services/user.service";
 import { responseSend } from "../config/response";
 
 const userService = new UserService();
+
+interface AuthRequest extends Request {
+    user?: any;
+}
 
 export class UserController {
     // Phương thức đăng ký người dùng
@@ -47,7 +52,8 @@ export class UserController {
 
             // Sửa thứ tự tham số: gender trước, username sau
             const user = await userService.register(email, password, phone, dateofbirth, gender, username, avatar);
-            const userPayload = { username: user.username, email: user.email, role: user.role };
+            const userId = user._id ? user._id.toString() : '';
+            const userPayload = { id: userId, username: user.username, email: user.email, role: user.role };
             const accessToken = generateAccessToken(userPayload);
             const refreshToken = generateRefreshToken(userPayload);
 
@@ -76,7 +82,8 @@ export class UserController {
             }
 
             const user = await userService.login(email, password);
-            const userPayload = { username: user.username, email: user.email, role: user.role };
+            const userId = user._id ? user._id.toString() : '';
+            const userPayload = { id: userId, username: user.username, email: user.email, role: user.role };
             const accessToken = generateAccessToken(userPayload);
             const refreshToken = generateRefreshToken(userPayload);
 
@@ -110,6 +117,7 @@ export class UserController {
             }
 
             const userPayload = {
+                id: decoded.id,
                 username: decoded.username,
                 email: decoded.email,
                 role: decoded.role,
@@ -187,6 +195,32 @@ export class UserController {
             responseSend(res, result, "Xóa người dùng thành công", HTTP_STATUS_CODES.OK);
         } catch (error: any) {
             responseSend(res, null, error.message || "Lỗi khi xóa người dùng", HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // Generate WebSocket token for real-time features
+    static async getWebSocketToken(req: AuthRequest, res: Response) {
+        try {
+            if (!req.user || !req.user.id) {
+                return responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
+            }
+
+            const wsToken = generateWebSocketToken(req.user.id);
+            
+            responseSend(
+                res, 
+                { wsToken }, 
+                "WebSocket token generated successfully", 
+                HTTP_STATUS_CODES.OK
+            );
+        } catch (error: any) {
+            console.error("Error generating WebSocket token:", error.message);
+            responseSend(
+                res, 
+                null, 
+                error.message || "Error generating WebSocket token", 
+                HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR
+            );
         }
     }
 }

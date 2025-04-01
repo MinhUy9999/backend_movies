@@ -6,10 +6,18 @@ import router from "./routes/index.routes";
 import { notificationService } from "./patterns/observer/NotificationSystem";
 import { EmailNotification, SMSNotification, PushNotification } from "./patterns/observer/NotificationSystem";
 import path from "path";
+import http from "http";
+import webSocketManager from "./patterns/singleton/WebSocketManager";
 
 // Initialize app
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// Initialize WebSocket manager
+webSocketManager.initialize(server);
 
 // Middleware
 app.use(express.json());
@@ -51,10 +59,11 @@ db.connect()
       res.status(200).json({ status: "UP", message: "Cinema Booking API is running" });
     });
 
-    // Start server
-    app.listen(PORT, () => {
+    // Start server - use server.listen instead of app.listen
+    server.listen(PORT, () => {
       console.log(`🚀 Server is running at http://localhost:${PORT}`);
       console.log(`💚 Health check available at http://localhost:${PORT}/health`);
+      console.log(`🔌 WebSocket server is active`);
     });
   })
   .catch((error) => {
@@ -66,11 +75,17 @@ db.connect()
 process.on('SIGINT', async () => {
   console.log('Shutting down server...');
   await db.disconnect();
-  process.exit(0);
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
 
 process.on('SIGTERM', async () => {
   console.log('Shutting down server...');
   await db.disconnect();
-  process.exit(0);
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });

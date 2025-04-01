@@ -37,3 +37,16 @@ export const authorizeRoles = (...roles: string[]) => {
         next();
     };
 };
+
+// Add WebSocket token generation function
+export const generateWebSocketToken = (userId: string): string => {
+    if (!process.env.ACCESS_TOKEN_SECRET) {
+        throw new Error("ACCESS_TOKEN_SECRET is not defined in environment variables");
+    }
+    
+    return jwt.sign(
+        { id: userId },
+        process.env.ACCESS_TOKEN_SECRET,
+        { expiresIn: '1h' } 
+    );
+};

@@ -4,11 +4,12 @@ import mongoose from 'mongoose';
 import { IBooking } from '../models/booking.model';
 import { BookingRepository } from '../patterns/repository/BookingRepository';
 import { ShowtimeRepository } from '../patterns/repository/ShowtimeRepository';
-import { Seat } from '../models/seat.model'; // Changed from SeatReservation
+import { Seat } from '../models/seat.model';
 import { TicketFactory } from '../patterns/factory/TicketFactory';
 import { PaymentProcessor } from '../patterns/strategy/PaymentStrategy';
 import { NotificationService, NotificationData } from '../patterns/observer/NotificationSystem';
 import { UserService } from './user.service';
+import webSocketManager from '../patterns/singleton/WebSocketManager';
 
 interface BookingRequest {
   userId: string;
@@ -96,14 +97,33 @@ export class BookingService {
 
       await session.commitTransaction();
 
+      // Start WebSocket booking timer
+      try {
+        if (booking && booking._id) {
+          const bookingId: string = typeof booking._id === 'object' 
+            ? booking._id.toString() 
+            : String(booking._id);
+            
+          webSocketManager.startBookingTimer(bookingRequest.userId, bookingId);
+          webSocketManager.notifySeatsUpdated(bookingRequest.showtimeId);
+        }
+      } catch (wsError) {
+        console.error('WebSocket Error:', wsError);
+        // Don't fail the operation if WebSocket notification fails
+      }
+
       // Send notification
       const user = await this.userService.getUserById(bookingRequest.userId);
       if (user) {
+        const bookingId: string = booking && booking._id 
+          ? (typeof booking._id === 'object' ? booking._id.toString() : String(booking._id)) 
+          : '';
+          
         const notificationData: NotificationData = {
           userId: user.id.toString(),
           email: user.email,
           phone: user.phone,
-          bookingId: booking._id ? booking._id.toString() : '',
+          bookingId: bookingId,
           movieTitle: showtime.movieId ? (showtime.movieId as any).title : 'Movie',
           theaterName: showtime.screenId ? 
             ((showtime.screenId as any).theaterId ? (showtime.screenId as any).theaterId.name : 'Theater') 
@@ -152,6 +172,19 @@ export class BookingService {
         throw new Error(`Payment failed: ${paymentResult.message}`);
       }
 
+      // Stop the WebSocket booking timer
+      try {
+        if (booking.userId) {
+          const userId: string = typeof booking.userId === 'object'
+            ? booking.userId.toString()
+            : String(booking.userId);
+            
+          webSocketManager.stopBookingTimer(userId, bookingId);
+        }
+      } catch (wsError) {
+        console.error('WebSocket Error:', wsError);
+      }
+
       // Update booking with successful payment
       const updatedBooking = await this.bookingRepository.update(bookingId, {
         paymentStatus: 'completed',
@@ -162,16 +195,33 @@ export class BookingService {
       // Confirm the booking (update seat statuses)
       await this.bookingRepository.confirmBooking(bookingId);
 
+      // Notify about seats update
+      try {
+        if (booking.showtimeId) {
+          const showtimeId: string = typeof booking.showtimeId === 'object'
+            ? booking.showtimeId.toString()
+            : String(booking.showtimeId);
+            
+          webSocketManager.notifySeatsUpdated(showtimeId);
+        }
+      } catch (wsError) {
+        console.error('WebSocket Error:', wsError);
+      }
+
       // Send notification
       const showtime = await this.showtimeRepository.findById(booking.showtimeId.toString());
       const user = await this.userService.getUserById(booking.userId.toString());
       
       if (user) {
+        const bookingIdStr: string = booking._id ? 
+          (typeof booking._id === 'object' ? booking._id.toString() : String(booking._id)) 
+          : '';
+            
         const notificationData: NotificationData = {
           userId: user.id.toString(),
           email: user.email,
           phone: user.phone,
-          bookingId: booking._id ? booking._id.toString() : '',
+          bookingId: bookingIdStr,
           movieTitle: showtime?.movieId ? (showtime.movieId as any).title : 'Movie',
           amount: booking.totalAmount,
           transactionId: paymentResult.transactionId
@@ -186,11 +236,15 @@ export class BookingService {
       // Send failed payment notification
       const user = await this.userService.getUserById(booking.userId.toString());
       if (user) {
+        const bookingIdStr: string = booking._id ? 
+          (typeof booking._id === 'object' ? booking._id.toString() : String(booking._id)) 
+          : '';
+            
         const notificationData: NotificationData = {
           userId: user.id.toString(),
           email: user.email,
           phone: user.phone,
-          bookingId: booking._id ? booking._id.toString() : '',
+          bookingId: bookingIdStr,
           amount: booking.totalAmount
         };
 
@@ -235,20 +289,44 @@ export class BookingService {
       });
     }
 
+    // Stop the WebSocket booking timer
+    try {
+      webSocketManager.stopBookingTimer(userId, bookingId);
+    } catch (wsError) {
+      console.error('WebSocket Error:', wsError);
+    }
+
     // Cancel the booking
     const cancelledBooking = await this.bookingRepository.cancelBooking(bookingId);
     if (!cancelledBooking) {
       throw new Error('Failed to cancel booking');
     }
 
+    // Notify about seats update
+    try {
+      if (booking.showtimeId) {
+        const showtimeId: string = typeof booking.showtimeId === 'object'
+          ? booking.showtimeId.toString()
+          : String(booking.showtimeId);
+          
+        webSocketManager.notifySeatsUpdated(showtimeId);
+      }
+    } catch (wsError) {
+      console.error('WebSocket Error:', wsError);
+    }
+
     // Send notification
     const user = await this.userService.getUserById(booking.userId.toString());
     if (user) {
+      const bookingIdStr: string = booking._id ? 
+        (typeof booking._id === 'object' ? booking._id.toString() : String(booking._id)) 
+        : '';
+          
       const notificationData: NotificationData = {
         userId: user.id.toString(),
         email: user.email,
         phone: user.phone,
-        bookingId: booking._id ? booking._id.toString() : '',
+        bookingId: bookingIdStr,
         movieTitle: showtime.movieId ? (showtime.movieId as any).title : 'Movie',
         theaterName: showtime.screenId ? 
           ((showtime.screenId as any).theaterId ? (showtime.screenId as any).theaterId.name : 'Theater') 
