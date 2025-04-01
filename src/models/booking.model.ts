@@ -32,18 +32,18 @@ const BookingSchema: Schema = new Schema({
   bookedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
-// Validation: Đảm bảo tất cả ghế thuộc cùng Showtime
+// Validation: Ensure all seats belong to the same Showtime
 BookingSchema.pre<IBooking>("save", async function (next) {
-  const SeatReservation = mongoose.model("SeatReservation");
+  const Seat = mongoose.model("Seat");
   const showtimeId = this.showtimeId;
 
-  // Kiểm tra từng seat trong mảng seats
-  const reservations = await SeatReservation.find({
-    seatId: { $in: this.seats },
+  // Check each seat in the seats array
+  const seats = await Seat.find({
+    _id: { $in: this.seats },
     showtimeId: showtimeId,
   });
 
-  if (reservations.length !== this.seats.length) {
+  if (seats.length !== this.seats.length) {
     next(new Error("All seats must belong to the same showtime"));
   } else {
     next();

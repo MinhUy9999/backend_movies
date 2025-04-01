@@ -3,8 +3,7 @@
 import { IShowtime } from '../models/showtime.model';
 import { ShowtimeRepository } from '../patterns/repository/ShowtimeRepository';
 import { MovieRepository } from '../patterns/repository/MovieRepository';
-import { ISeatReservation, SeatReservation } from '../models/seat.reservation.model';
-import { Seat } from '../models/seat.model';
+import { Seat, ISeat } from '../models/seat.model'; // Changed from SeatReservation
 
 export class ShowtimeService {
   private showtimeRepository: ShowtimeRepository;
@@ -64,9 +63,9 @@ export class ShowtimeService {
     // Create the showtime
     const newShowtime = await this.showtimeRepository.create(showtimeData);
 
-    // Initialize seat reservations for this showtime
+    // Initialize seat availability for this showtime
     if (newShowtime._id) {
-      await this.initializeSeatReservations(newShowtime._id.toString(), showtimeData.screenId.toString());
+      await this.initializeSeatAvailability(newShowtime._id.toString(), showtimeData.screenId.toString());
     }
 
     return newShowtime;
@@ -111,12 +110,12 @@ export class ShowtimeService {
 
   async deleteShowtime(id: string): Promise<boolean> {
     // Check if there are bookings for this showtime
-    const reservations = await SeatReservation.find({ 
+    const bookedSeats = await Seat.find({ 
       showtimeId: id,
       status: { $in: ['reserved', 'booked'] }
     });
 
-    if (reservations.length > 0) {
+    if (bookedSeats.length > 0) {
       // If there are bookings, don't allow deletion - just mark inactive
       await this.showtimeRepository.update(id, { isActive: false });
       return true;
@@ -133,24 +132,12 @@ export class ShowtimeService {
       throw new Error('Showtime not found');
     }
 
-    // Get all seats for the screen
+    // Get all seats for the screen with their status for this showtime
     const seats = await Seat.find({ 
       screenId: showtime.screenId,
+      showtimeId: showtimeId,
       isActive: true 
     }).sort({ row: 1, seatNumber: 1 });
-
-    // Get reservation status for each seat
-    const seatReservations = await SeatReservation.find({
-      showtimeId: showtimeId
-    });
-
-    // Create a map of seat ID to reservation status
-    const reservationMap: { [key: string]: string } = {};
-    seatReservations.forEach((reservation: ISeatReservation) => {
-      if (reservation.seatId) {
-        reservationMap[reservation.seatId.toString()] = reservation.status;
-      }
-    });
 
     // Organize seats by row
     const seatsByRow: { [key: string]: any[] } = {};
@@ -159,15 +146,13 @@ export class ShowtimeService {
         seatsByRow[seat.row] = [];
       }
       
-      const seatId = seat._id ? seat._id.toString() : '';
-      
       seatsByRow[seat.row].push({
         id: seat._id,
         row: seat.row,
         number: seat.seatNumber,
         type: seat.seatType,
         price: showtime.price[seat.seatType as keyof typeof showtime.price],
-        status: reservationMap[seatId] || 'available'
+        status: seat.status || 'available'
       });
     });
 
@@ -180,21 +165,27 @@ export class ShowtimeService {
       }));
   }
 
-  // Helper method to initialize seat reservations for a new showtime
-  private async initializeSeatReservations(showtimeId: string, screenId: string): Promise<void> {
+  // Helper method to initialize seat availability for a new showtime
+  private async initializeSeatAvailability(showtimeId: string, screenId: string): Promise<void> {
     // Get all seats for the screen
-    const seats = await Seat.find({ screenId, isActive: true });
+    const screenSeats = await Seat.find({ screenId, isActive: true });
 
-    // Create initial reservations (all available)
-    const reservations = seats.map(seat => ({
-      showtimeId,
-      seatId: seat._id,
-      status: 'available' as const
-    }));
+    // Create copies of these seats for this specific showtime
+    const showtimeSeats = screenSeats.map(screenSeat => {
+      return {
+        screenId: screenSeat.screenId,
+        row: screenSeat.row,
+        seatNumber: screenSeat.seatNumber,
+        seatType: screenSeat.seatType,
+        isActive: true,
+        showtimeId: showtimeId,
+        status: 'available'
+      };
+    });
 
-    // Bulk insert all reservations
-    if (reservations.length > 0) {
-      await SeatReservation.insertMany(reservations);
+    // Bulk insert all seats for this showtime
+    if (showtimeSeats.length > 0) {
+      await Seat.insertMany(showtimeSeats);
     }
   }
 }

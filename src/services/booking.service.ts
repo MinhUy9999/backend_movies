@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import { IBooking } from '../models/booking.model';
 import { BookingRepository } from '../patterns/repository/BookingRepository';
 import { ShowtimeRepository } from '../patterns/repository/ShowtimeRepository';
-import { SeatReservation, ISeatReservation } from '../models/seat.reservation.model';
+import { Seat } from '../models/seat.model'; // Changed from SeatReservation
 import { TicketFactory } from '../patterns/factory/TicketFactory';
 import { PaymentProcessor } from '../patterns/strategy/PaymentStrategy';
 import { NotificationService, NotificationData } from '../patterns/observer/NotificationSystem';
@@ -55,10 +55,10 @@ export class BookingService {
         throw new Error('This showtime has already started');
       }
 
-      // Check if seats are available
-      const seatAvailability = await SeatReservation.find({
+      // Check if seats are available - using Seat model directly instead of SeatReservation
+      const seatAvailability = await Seat.find({
+        _id: { $in: bookingRequest.seatIds },
         showtimeId: bookingRequest.showtimeId,
-        seatId: { $in: bookingRequest.seatIds },
         status: { $ne: 'available' }
       });
 
@@ -70,7 +70,8 @@ export class BookingService {
       let totalAmount = 0;
       for (const seatId of bookingRequest.seatIds) {
         // Get seat type (would need to query seat details in a real implementation)
-        const seatType = 'standard'; // Placeholder - would be determined from seat data
+        const seatData = await Seat.findById(seatId);
+        const seatType = seatData ? seatData.seatType : 'standard';
         
         // Use Factory Pattern to create appropriate ticket
         const ticket = TicketFactory.createTicket(
@@ -158,7 +159,7 @@ export class BookingService {
         transactionId: paymentResult.transactionId
       });
 
-      // Confirm the booking (update seat reservations)
+      // Confirm the booking (update seat statuses)
       await this.bookingRepository.confirmBooking(bookingId);
 
       // Send notification

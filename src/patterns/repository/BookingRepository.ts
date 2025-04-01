@@ -1,7 +1,7 @@
 // Triển khai Repository Pattern để truy cập dữ liệu
 import mongoose from 'mongoose';
 import { Booking, IBooking } from '../../models/booking.model'; // Nhập mô hình Booking và interface IBooking
-import { SeatReservation, ISeatReservation } from '../../models/seat.reservation.model'; // Nhập mô hình SeatReservation và interface ISeatReservation
+import { Seat, ISeat } from '../../models/seat.model'; // Nhập mô hình Seat và interface ISeat thay thế SeatReservation
 
 // Giao diện Repository
 export interface IBookingRepository {
@@ -53,17 +53,17 @@ export class BookingRepository implements IBookingRepository {
 
       // Cập nhật trạng thái đặt ghế
       const seatUpdates = bookingData.seats?.map(seatId => // Duyệt qua danh sách ghế
-        SeatReservation.updateOne(
+        Seat.updateOne(
           {
-            showtimeId: bookingData.showtimeId, // Tìm ghế theo suất chiếu
-            seatId: seatId // Tìm ghế theo ID
+            _id: seatId, // Tìm ghế theo ID
+            showtimeId: bookingData.showtimeId // Tìm ghế theo suất chiếu
           },
           {
             status: 'reserved', // Cập nhật trạng thái thành "reserved"
             bookingId: newBooking._id, // Liên kết với đặt chỗ mới
             expiresAt: new Date(Date.now() + 15 * 60 * 1000) // Đặt thời gian hết hạn 15 phút
           },
-          { upsert: true, session } // Tạo mới nếu chưa tồn tại, dùng session
+          { session } // Dùng session
         )
       );
 
@@ -109,7 +109,7 @@ export class BookingRepository implements IBookingRepository {
         return false; // Trả về false
       }
 
-      await SeatReservation.updateMany(
+      await Seat.updateMany(
         { bookingId: booking._id }, // Tìm các ghế liên quan đến đặt chỗ
         {
           status: 'available', // Cập nhật trạng thái ghế thành "available"
@@ -136,13 +136,14 @@ export class BookingRepository implements IBookingRepository {
       throw new Error('Invalid seat ID or showtime ID'); // Ném lỗi nếu không hợp lệ
     }
 
-    const reservations = await SeatReservation.find({ // Tìm các đặt ghế
-      seatId, // Theo ID ghế
-      showtimeId, // Theo ID suất chiếu
-      status: { $in: ['reserved', 'booked'] } // Chỉ lấy trạng thái "reserved" hoặc "booked"
+    // Tìm các ghế đã được đặt
+    const seats = await Seat.find({ 
+      _id: seatId, 
+      showtimeId, 
+      status: { $in: ['reserved', 'booked'] } 
     });
 
-    const bookingIds = reservations.map((res: ISeatReservation) => res.bookingId).filter((id: mongoose.Types.ObjectId | undefined) => id !== undefined); // Lấy danh sách bookingId từ kết quả
+    const bookingIds = seats.map((seat: ISeat) => seat.bookingId).filter((id: mongoose.Types.ObjectId | undefined) => id !== undefined); // Lấy danh sách bookingId từ kết quả
 
     return await Booking.find({ // Truy vấn các đặt chỗ tương ứng
       _id: { $in: bookingIds }, // Theo danh sách bookingId
@@ -174,7 +175,7 @@ export class BookingRepository implements IBookingRepository {
         return null; // Trả về null
       }
 
-      await SeatReservation.updateMany(
+      await Seat.updateMany(
         { bookingId: booking._id }, // Tìm các ghế liên quan
         {
           status: 'booked', // Cập nhật trạng thái thành "booked"
@@ -214,7 +215,7 @@ export class BookingRepository implements IBookingRepository {
         return null; // Trả về null
       }
 
-      await SeatReservation.updateMany(
+      await Seat.updateMany(
         { bookingId: booking._id }, // Tìm các ghế liên quan
         {
           status: 'available', // Cập nhật trạng thái thành "available"
