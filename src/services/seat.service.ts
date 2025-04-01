@@ -17,17 +17,9 @@ export class SeatService {
     static async updateSeat(id: string, data: Partial<ISeat>): Promise<ISeat | null> {
         const updatedSeat = await Seat.findByIdAndUpdate(id, data, { new: true });
         
-        // Nếu cập nhật thành công và có showtimeId, thông báo qua WebSocket
+        // If seat is updated and has showtimeId, notify via WebSocket
         if (updatedSeat && updatedSeat.showtimeId) {
-            webSocketManager.notifySeatStatusChanged(
-                updatedSeat.showtimeId.toString(),
-                {
-                    seatId: updatedSeat._id,
-                    status: updatedSeat.status,
-                    row: updatedSeat.row,
-                    seatNumber: updatedSeat.seatNumber
-                }
-            );
+            webSocketManager.notifySeatsUpdated(updatedSeat.showtimeId.toString());
         }
         
         return updatedSeat;
@@ -45,7 +37,7 @@ export class SeatService {
         }
         
         if (seat.status !== 'available') {
-            throw new Error("Ghế này đã được đặt");
+            throw new Error("Seat is already reserved");
         }
         
         seat.status = 'reserved';
@@ -53,16 +45,8 @@ export class SeatService {
         
         const updatedSeat = await seat.save();
         
-        // Thông báo qua WebSocket
-        webSocketManager.notifySeatStatusChanged(
-            showtimeId,
-            {
-                seatId: updatedSeat._id,
-                status: 'reserved',
-                row: updatedSeat.row,
-                seatNumber: updatedSeat.seatNumber
-            }
-        );
+        // Notify via WebSocket about seats update
+        webSocketManager.notifySeatsUpdated(showtimeId);
         
         return updatedSeat;
     }
@@ -79,16 +63,8 @@ export class SeatService {
         );
         
         if (seat) {
-            // Thông báo qua WebSocket
-            webSocketManager.notifySeatStatusChanged(
-                showtimeId,
-                {
-                    seatId: seat._id,
-                    status: 'booked',
-                    row: seat.row,
-                    seatNumber: seat.seatNumber
-                }
-            );
+            // Notify via WebSocket about seats update
+            webSocketManager.notifySeatsUpdated(showtimeId);
         }
         
         return seat;
@@ -105,16 +81,8 @@ export class SeatService {
         );
         
         if (seat) {
-            // Thông báo qua WebSocket
-            webSocketManager.notifySeatStatusChanged(
-                showtimeId,
-                {
-                    seatId: seat._id,
-                    status: 'available',
-                    row: seat.row,
-                    seatNumber: seat.seatNumber
-                }
-            );
+            // Notify via WebSocket about seats update
+            webSocketManager.notifySeatsUpdated(showtimeId);
         }
         
         return seat;
@@ -138,16 +106,8 @@ export class SeatService {
             );
             
             if (seat.showtimeId) {
-                // Thông báo qua WebSocket
-                webSocketManager.notifySeatStatusChanged(
-                    seat.showtimeId.toString(),
-                    {
-                        seatId: seat._id,
-                        status: 'available',
-                        row: seat.row,
-                        seatNumber: seat.seatNumber
-                    }
-                );
+                // Notify via WebSocket about seats update
+                webSocketManager.notifySeatsUpdated(seat.showtimeId.toString());
             }
         }
     }
