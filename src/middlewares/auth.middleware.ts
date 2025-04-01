@@ -47,6 +47,6 @@ export const generateWebSocketToken = (userId: string): string => {
     return jwt.sign(
         { id: userId },
         process.env.ACCESS_TOKEN_SECRET,
-        { expiresIn: '1h' } 
+        { expiresIn: '1d' } 
     );
 };
