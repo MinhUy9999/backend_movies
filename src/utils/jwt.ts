@@ -16,7 +16,7 @@ if (!ACCESS_TOKEN_SECRET || !REFRESH_TOKEN_SECRET) {
  * @returns Access token
  */
 export const generateAccessToken = (user: { id: string; username: string; email: string; role: string }) => {
-    return jwt.sign(user, ACCESS_TOKEN_SECRET, { expiresIn: "1h" });
+    return jwt.sign(user, ACCESS_TOKEN_SECRET, { expiresIn: "1d" });
 };
 
 /**
