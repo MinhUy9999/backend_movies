@@ -8,10 +8,10 @@ const bookingRoutes: Router = express.Router();
 bookingRoutes.use(authenticateToken);
 
 // User booking routes
-bookingRoutes.post("/", BookingController.createBooking);
-bookingRoutes.post("/payment", BookingController.processPayment);
-bookingRoutes.delete("/:id", BookingController.cancelBooking);
-bookingRoutes.get("/", BookingController.getUserBookings);
-bookingRoutes.get("/:id", BookingController.getBookingDetails);
+bookingRoutes.post("/", authenticateToken, BookingController.createBooking);
+bookingRoutes.post("/payment", authenticateToken, BookingController.processPayment);
+bookingRoutes.delete("/:id", authenticateToken, BookingController.cancelBooking);
+bookingRoutes.get("/", authenticateToken, BookingController.getUserBookings);
+bookingRoutes.get("/:id", authenticateToken, BookingController.getBookingDetails);
 
 export default bookingRoutes;

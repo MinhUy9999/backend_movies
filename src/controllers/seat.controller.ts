@@ -178,4 +178,30 @@ export class SeatController {
             );
         }
     }
+    // Thêm phương thức này vào SeatController
+    static async getSeatsByShowtime(req: Request, res: Response) {
+        try {
+            const { showtimeId } = req.params;
+
+            if (!showtimeId) {
+                return responseSend(
+                    res,
+                    null,
+                    "ID suất chiếu không hợp lệ",
+                    HTTP_STATUS_CODES.BAD_REQUEST
+                );
+            }
+
+            const seats = await SeatService.getSeatsByShowtime(showtimeId);
+            responseSend(res, seats, "Lấy danh sách ghế theo suất chiếu thành công", HTTP_STATUS_CODES.OK);
+        } catch (error) {
+            console.error("Error in getSeatsByShowtime:", error);
+            responseSend(
+                res,
+                null,
+                "Lỗi khi lấy danh sách ghế theo suất chiếu",
+                HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
 }
