@@ -1,4 +1,3 @@
-// File điều khiển xử lý các yêu cầu HTTP liên quan đến người dùng
 import { Request, Response } from "express";
 import { HTTP_STATUS_CODES } from "../httpStatus/httpStatusCode";
 import { isValidEmail, isValidPhoneNumber, isValidPassword, isValidDateOfBirth } from "../utils/validation";
@@ -6,6 +5,8 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from ".
 import { generateWebSocketToken } from "../middlewares/auth.middleware";
 import { UserService } from "../services/user.service";
 import { responseSend } from "../config/response";
+import webSocketManager from "../patterns/singleton/WebSocketManager";
+import { User } from "../models/user.model";
 
 const userService = new UserService();
 
@@ -14,7 +15,6 @@ interface AuthRequest extends Request {
 }
 
 export class UserController {
-    // Phương thức đăng ký người dùng
     static async register(req: Request, res: Response) {
         try {
             const { email, password, phone, dateofbirth, gender, username, avatar } = req.body;
@@ -50,7 +50,6 @@ export class UserController {
                 );
             }
 
-            // Sửa thứ tự tham số: gender trước, username sau
             const user = await userService.register(email, password, phone, dateofbirth, gender, username, avatar);
             const userId = user._id ? user._id.toString() : '';
             const userPayload = { id: userId, username: user.username, email: user.email, role: user.role };
@@ -69,7 +68,6 @@ export class UserController {
             );
         }
     }
-    // Phương thức đăng nhập người dùng
     static async login(req: Request, res: Response) {
         try {
             const { email, password } = req.body;
@@ -94,7 +92,6 @@ export class UserController {
             responseSend(res, null, error.message || "Lỗi khi đăng nhập", HTTP_STATUS_CODES.UNAUTHORIZED);
         }
     }
-    // Phương thức lấy tất cả người dùng
     static async getAllUsers(req: Request, res: Response) {
         try {
             const users = await userService.getAllUsers();
@@ -103,7 +100,6 @@ export class UserController {
             responseSend(res, null, error.message || "Lỗi khi lấy danh sách người dùng", HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR);
         }
     }
-    // Phương thức làm mới token
     static async refreshToken(req: Request, res: Response) {
         try {
             const refreshToken = req.cookies?.refreshToken;
@@ -129,7 +125,6 @@ export class UserController {
             responseSend(res, null, error.message || "Lỗi khi làm mới token", HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR);
         }
     }
-    // Phương thức xử lý yêu cầu quên mật khẩu
     static async forgotPassword(req: Request, res: Response) {
         try {
             const { email } = req.body;
@@ -164,7 +159,6 @@ export class UserController {
             responseSend(res, null, error.message || "Lỗi khi đặt lại mật khẩu", HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR);
         }
     }
-    // Lấy thông tin người dùng theo ID
     static async getUserById(req: Request, res: Response) {
         try {
             const { id } = req.params;
@@ -175,7 +169,6 @@ export class UserController {
         }
     }
 
-    // Cập nhật thông tin người dùng
     static async updateUser(req: Request, res: Response) {
         try {
             const { id } = req.params;
@@ -187,7 +180,6 @@ export class UserController {
         }
     }
 
-    // Xóa người dùng
     static async deleteUser(req: Request, res: Response) {
         try {
             const { id } = req.params;
@@ -198,7 +190,6 @@ export class UserController {
         }
     }
 
-    // Generate WebSocket token for real-time features
     static async getWebSocketToken(req: AuthRequest, res: Response) {
         try {
             if (!req.user || !req.user.id) {
@@ -221,6 +212,37 @@ export class UserController {
                 error.message || "Error generating WebSocket token", 
                 HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR
             );
+        }
+    }
+
+    static async getOnlineUsers(req: AuthRequest, res: Response): Promise<void> {
+        try {
+          if (!req.user) {
+            responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
+            return;
+          }
+          
+          const onlineUserIds = Array.from(webSocketManager.getOnlineUserIds());
+          
+          const onlineUsers = await User.find(
+            { _id: { $in: onlineUserIds } },
+            'username email avatar'
+          );
+          
+          responseSend(
+            res,
+            { onlineUsers },
+            "Online users fetched successfully",
+            HTTP_STATUS_CODES.OK
+          );
+        } catch (error: any) {
+          console.error("Error fetching online users:", error.message);
+          responseSend(
+            res,
+            null,
+            error.message || "Error fetching online users",
+            HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR
+          );
         }
     }
 }

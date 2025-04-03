@@ -41,9 +41,13 @@ userRoutes.get("/ws-token", authenticateToken, (req: Request, res: Response) => 
     UserController.getWebSocketToken(req, res);
 });
 
-userRoutes.get("/:id", UserController.getUserById);  // Lấy thông tin user theo ID
-userRoutes.put("/:id", authenticateToken, authorizeRoles("admin"), UserController.updateUser);  // Cập nhật user
-userRoutes.delete("/:id", authenticateToken, authorizeRoles("admin"), UserController.deleteUser);  // Xóa user
+userRoutes.get("/:id", UserController.getUserById);  
+userRoutes.put("/:id", authenticateToken, authorizeRoles("admin"), UserController.updateUser);  
+userRoutes.delete("/:id", authenticateToken, authorizeRoles("admin"), UserController.deleteUser);  
 userRoutes.get("/users", authenticateToken, authorizeRoles("admin"), UserController.getAllUsers);
+
+userRoutes.get("/online", authenticateToken, (req: Request, res: Response) => {
+    UserController.getOnlineUsers(req, res);
+});
 
 export default userRoutes;
