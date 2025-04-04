@@ -23,13 +23,8 @@ export class MessageController {
       const { otherUserId } = req.params;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       
-      console.log("Getting conversation between", req.user.id, "and", otherUserId);
-      console.log("User role:", req.user.role);
-      
       let userId = req.user.role === "admin" ? otherUserId : req.user.id;
       let adminId = req.user.role === "admin" ? req.user.id : otherUserId;
-      
-      console.log("Using userId:", userId, "and adminId:", adminId);
       
       const messages = await messageService.getConversation(userId, adminId, limit);
       
