@@ -23,7 +23,15 @@ export class MessageController {
       const { otherUserId } = req.params;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       
-      const messages = await messageService.getConversation(req.user.id, otherUserId, limit);
+      console.log("Getting conversation between", req.user.id, "and", otherUserId);
+      console.log("User role:", req.user.role);
+      
+      let userId = req.user.role === "admin" ? otherUserId : req.user.id;
+      let adminId = req.user.role === "admin" ? req.user.id : otherUserId;
+      
+      console.log("Using userId:", userId, "and adminId:", adminId);
+      
+      const messages = await messageService.getConversation(userId, adminId, limit);
       
       responseSend(res, { messages }, "Conversation fetched successfully", HTTP_STATUS_CODES.OK);
     } catch (error: any) {
@@ -64,17 +72,29 @@ export class MessageController {
       
       const message = await messageService.sendMessage(req.user.id, receiverId, content);
       
-      // Notify the receiver via WebSocket
       webSocketManager.sendToUser(receiverId, {
         type: 'new_message',
         message: {
           _id: message._id,
-          sender: {
-            _id: req.user.id,
-            username: req.user.username
-          },
+          sender: message.sender,
           content: message.content,
-          createdAt: message.createdAt
+          createdAt: message.createdAt,
+          userId: message.userId,
+          adminId: message.adminId,
+          isRead: message.isRead
+        }
+      });
+
+      webSocketManager.sendToUser(req.user.id, {
+        type: 'new_message',
+        message: {
+          _id: message._id,
+          sender: message.sender,
+          content: message.content,
+          createdAt: message.createdAt,
+          userId: message.userId,
+          adminId: message.adminId,
+          isRead: message.isRead
         }
       });
       
@@ -101,7 +121,6 @@ export class MessageController {
         return;
       }
       
-      // Notify the sender via WebSocket
       webSocketManager.sendToUser(message.sender.toString(), {
         type: 'message_read',
         messageId
