@@ -133,11 +133,21 @@ export class WebSocketManager {
   }
   
   public sendToUser(userId: string, data: any): boolean {
+    console.log(`Attempt to send to user ${userId}. Is client registered? ${this.clients.has(userId)}`);
+    
     const client = this.clients.get(userId);
     
-    if (client && client.ws.readyState === WebSocket.OPEN) {
-      client.ws.send(JSON.stringify(data));
-      return true;
+    if (client) {
+      console.log(`Found client for user ${userId}. WebSocket state: ${client.ws.readyState}`);
+      if (client.ws.readyState === WebSocket.OPEN) {
+        console.log(`Sending data to user ${userId}:`, JSON.stringify(data));
+        client.ws.send(JSON.stringify(data));
+        return true;
+      } else {
+        console.log(`WebSocket not open for user ${userId}. State: ${client.ws.readyState}`);
+      }
+    } else {
+      console.log(`No client found for user ${userId}`);
     }
     
     return false;
@@ -311,7 +321,8 @@ private async handleChatMessage(senderId: string, data: any): Promise<void> {
         content: message.content,
         createdAt: message.createdAt,
         userId: message.userId,
-        adminId: message.adminId
+        adminId: message.adminId,
+        isRead: message.isRead,
       }
     });
     
