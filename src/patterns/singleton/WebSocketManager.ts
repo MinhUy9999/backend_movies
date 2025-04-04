@@ -341,6 +341,24 @@ private async handleChatMessage(senderId: string, data: any): Promise<void> {
   }
 }
 
+public sendMessage(senderId: string, receiverId: string, message: any): boolean {
+  console.log(`Sending message from ${senderId} to ${receiverId}:`, message);
+  
+  const receiverSuccess = this.sendToUser(receiverId, {
+    type: 'new_message',
+    message
+  });
+  
+  const senderSuccess = this.sendToUser(senderId, {
+    type: 'message_sent',
+    message
+  });
+  
+  console.log(`Message delivery status - receiver: ${receiverSuccess}, sender: ${senderSuccess}`);
+  
+  return receiverSuccess || senderSuccess;
+}
+
 private async handleMessageRead(userId: string, data: any): Promise<void> {
   try {
     if (!data.messageId) {

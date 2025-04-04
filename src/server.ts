@@ -19,7 +19,7 @@ webSocketManager.initialize(server);
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173'], 
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://your-frontend-domain.com'], // Thêm frontend URL sau khi deploy
   credentials: true
 }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -50,11 +50,23 @@ db.connect()
       res.status(200).json({ status: "UP", message: "Cinema Booking API is running" });
     });
 
-    server.listen(PORT, () => {
-      console.log(`🚀 Server is running at http://localhost:${PORT}`);
+    app.get("/", (req, res) => {
+      res.status(200).json({ status: "UP", message: "Cinema Booking API is running" });
+    });
+
+    console.log(`Attempting to listen on PORT: ${PORT}`);
+
+    server.listen(Number(PORT), '0.0.0.0', () => {
+      console.log(`🚀 Server is running on PORT: ${PORT}`);
       console.log(`💚 Health check available at http://localhost:${PORT}/health`);
       console.log(`🔌 WebSocket server is active`);
     });
+
+    // server.listen((PORT), () => {
+    //   console.log(`🚀 Server is running on PORT: ${PORT} and hostname: 0.0.0.0`);
+    //   console.log(`💚 Health check available at http://localhost:${PORT}/health`);
+    //   console.log(`🔌 WebSocket server is active`);
+    // });
   })
   .catch((error) => {
     console.error("Failed to start server:", error);
