@@ -56,7 +56,7 @@ db.connect()
 
     console.log(`Attempting to listen on PORT: ${PORT}`);
 
-    server.listen(Number(PORT), '0.0.0.0', () => {
+    server.listen(Number(PORT), () => {
       console.log(`🚀 Server is running on PORT: ${PORT}`);
       console.log(`💚 Health check available at http://localhost:${PORT}/health`);
       console.log(`🔌 WebSocket server is active`);
