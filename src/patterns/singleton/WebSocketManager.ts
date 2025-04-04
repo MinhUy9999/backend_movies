@@ -20,6 +20,10 @@ export class WebSocketManager {
   private constructor() {
   }
 
+  public getConnectedClientIds(): string[] {
+    return Array.from(this.clients.keys());
+  }
+
   public static getInstance(): WebSocketManager {
     if (!WebSocketManager.instance) {
       WebSocketManager.instance = new WebSocketManager();
@@ -42,7 +46,7 @@ export class WebSocketManager {
     if (!this.wss) {
       throw new Error('WebSocket server not initialized');
     }
-
+  
     this.wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       try {
         const url = new URL(req.url || '', `http://${req.headers.host}`);
@@ -53,6 +57,7 @@ export class WebSocketManager {
           return;
         }
         
+        // Decode token and extract user ID
         const decoded = verifyAccessToken(token);
         if (!decoded || typeof decoded !== 'object' || !decoded.id) {
           ws.close(1008, 'Invalid authentication token');
@@ -61,7 +66,10 @@ export class WebSocketManager {
         
         const userId = decoded.id.toString();
         
+        console.log(`[WS] New connection from user: ${userId}`);
         this.registerClient(userId, ws);
+        
+        console.log(`[WS] Currently connected clients: ${Array.from(this.clients.keys()).join(', ')}`);
         
         ws.on('message', (message: WebSocket.Data) => {
           let msgStr: string;
@@ -94,7 +102,8 @@ export class WebSocketManager {
   }
   
   private registerClient(userId: string, ws: WebSocket): void {
-    if (this.clients.has(userId)) {
+    const userIdStr = userId.toString();
+    if (this.clients.has(userIdStr)) {
       const existingClient = this.clients.get(userId);
       if (existingClient && existingClient.ws.readyState === WebSocket.OPEN) {
         existingClient.ws.close(1000, 'New connection established');
@@ -108,14 +117,15 @@ export class WebSocketManager {
         bookingTimers: existingTimers
       });
     } else {
-      this.clients.set(userId, {
-        userId,
+      this.clients.set(userIdStr, {
+        userId: userIdStr,
         ws,
         bookingTimers: new Map()
       });
     }
     
-    console.log(`Client connected: ${userId}`);
+    console.log(`[WS] Client connected: ${userIdStr}`);
+    console.log(`[WS] Total clients connected: ${this.clients.size}`);  
   }
   
   private unregisterClient(userId: string): void {
@@ -133,21 +143,44 @@ export class WebSocketManager {
   }
   
   public sendToUser(userId: string, data: any): boolean {
-    console.log(`Attempt to send to user ${userId}. Is client registered? ${this.clients.has(userId)}`);
+    const userIdStr = userId.toString();
     
-    const client = this.clients.get(userId);
+    console.log(`[WS] Attempting to send to user: "${userIdStr}"`);
+    console.log(`[WS] Currently connected clients: ${Array.from(this.clients.keys()).join(', ')}`);
+    
+    let client = this.clients.get(userIdStr);
+    
+    if (!client) {
+      const alternativeFormats = [
+        userIdStr,
+        userIdStr.replace(/^ObjectId\(['"](.+)['"]\)$/, '$1')
+      ];
+      
+      for (const format of alternativeFormats) {
+        if (this.clients.has(format)) {
+          client = this.clients.get(format);
+          console.log(`[WS] Found client using alternative format: ${format}`);
+          break;
+        }
+      }
+    }
     
     if (client) {
-      console.log(`Found client for user ${userId}. WebSocket state: ${client.ws.readyState}`);
+      console.log(`[WS] Client found for user ${userIdStr}. WebSocket state: ${client.ws.readyState}`);
       if (client.ws.readyState === WebSocket.OPEN) {
-        console.log(`Sending data to user ${userId}:`, JSON.stringify(data));
-        client.ws.send(JSON.stringify(data));
-        return true;
+        try {
+          const jsonData = JSON.stringify(data);
+          console.log(`[WS] Sending data to ${userIdStr}: ${jsonData.substring(0, 100)}...`);
+          client.ws.send(jsonData);
+          return true;
+        } catch (error) {
+          console.error(`[WS] Error sending to user ${userIdStr}:`, error);
+        }
       } else {
-        console.log(`WebSocket not open for user ${userId}. State: ${client.ws.readyState}`);
+        console.log(`[WS] WebSocket not in OPEN state for user ${userIdStr}. State: ${client.ws.readyState}`);
       }
     } else {
-      console.log(`No client found for user ${userId}`);
+      console.log(`[WS] No WebSocket connection found for user: ${userIdStr}`);
     }
     
     return false;

@@ -5,7 +5,6 @@ import { MessageService } from "../services/message.service";
 import { responseSend } from "../config/response";
 import webSocketManager from "../patterns/singleton/WebSocketManager";
 
-// Interface to extend Request with user info
 interface AuthRequest extends Request {
   user?: any;
 }
@@ -67,30 +66,34 @@ export class MessageController {
       
       const message = await messageService.sendMessage(req.user.id, receiverId, content);
       
-      webSocketManager.sendToUser(receiverId, {
+      const messageForWs = {
+        _id: message._id ? message._id.toString() : "",
+        sender: message.sender || "",
+        content: message.content || "",
+        createdAt: message.createdAt || new Date(),
+        userId: message.userId ? message.userId.toString() : "",
+        adminId: message.adminId ? message.adminId.toString() : "",
+        isRead: message.isRead || false
+      };
+      
+      // Determine sender and receiver IDs based on sender role
+      const senderIdStr = messageForWs.sender === 'admin' ? 
+        messageForWs.adminId : messageForWs.userId;
+      const receiverIdStr = messageForWs.sender === 'admin' ? 
+        messageForWs.userId : messageForWs.adminId;
+      
+      console.log(`[MessageController] Message created. Sender: ${senderIdStr}, Receiver: ${receiverIdStr}`);
+      
+      // Send to receiver
+      webSocketManager.sendToUser(receiverIdStr, {
         type: 'new_message',
-        message: {
-          _id: message._id,
-          sender: message.sender,
-          content: message.content,
-          createdAt: message.createdAt,
-          userId: message.userId,
-          adminId: message.adminId,
-          isRead: message.isRead
-        }
+        message: messageForWs
       });
-
-      webSocketManager.sendToUser(req.user.id, {
+      
+      // Send to sender (confirmation)
+      webSocketManager.sendToUser(senderIdStr, {
         type: 'new_message',
-        message: {
-          _id: message._id,
-          sender: message.sender,
-          content: message.content,
-          createdAt: message.createdAt,
-          userId: message.userId,
-          adminId: message.adminId,
-          isRead: message.isRead
-        }
+        message: messageForWs
       });
       
       responseSend(res, { message }, "Message sent successfully", HTTP_STATUS_CODES.CREATED);
