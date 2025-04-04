@@ -1,7 +1,6 @@
 import express, { Router } from "express";
 import { MessageController } from "../controllers/message.controller";
 import { authenticateToken } from "../middlewares/auth.middleware";
-import { UserController } from "../controllers/user.controller";
 
 const messageRoutes: Router = express.Router();
 
