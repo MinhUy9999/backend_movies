@@ -205,37 +205,90 @@ export class SocketService {
     this.io.emit('seats_updated', { showtimeId });
   }
 
-  public startBookingTimer(userId: string, bookingId: string, expirationMinutes: number = 15): boolean {
-    // Notify user about booking reservation and expiration
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + expirationMinutes);
-    
-    this.sendToUser(userId, 'booking_reserved', {
-      bookingId,
-      expiresAt: expiresAt.toISOString()
+  private bookingTimers: Map<string, Map<string, NodeJS.Timeout[]>> = new Map();
+
+public startBookingTimer(userId: string, bookingId: string, expirationMinutes: number = 15): boolean {
+  if (!this.bookingTimers.has(userId)) {
+    this.bookingTimers.set(userId, new Map());
+  }
+  
+  this.stopBookingTimer(userId, bookingId);
+  
+  const expiresAt = new Date();
+  expiresAt.setMinutes(expiresAt.getMinutes() + expirationMinutes);
+  
+  const allTimers: NodeJS.Timeout[] = [];
+  
+  const countdownMinutes = [10, 5, 2, 1];
+  for (const minute of countdownMinutes) {
+    if (minute < expirationMinutes) {
+      const notifyAt = new Date();
+      notifyAt.setMinutes(notifyAt.getMinutes() + expirationMinutes - minute);
+      
+      const timer = setTimeout(() => {
+        this.sendToUser(userId, 'booking_expiring', {
+          bookingId,
+          minutesLeft: minute
+        });
+      }, notifyAt.getTime() - Date.now());
+      
+      allTimers.push(timer);
+    }
+  }
+  
+  const expirationTimer = setTimeout(() => {
+    this.sendToUser(userId, 'booking_expired', {
+      bookingId
     });
     
-    // Schedule notifications for remaining time
-    const countdownMinutes = [10, 5, 2, 1];
-    for (const minute of countdownMinutes) {
-      if (minute < expirationMinutes) {
-        const notifyAt = new Date();
-        notifyAt.setMinutes(notifyAt.getMinutes() + expirationMinutes - minute);
-        
-        setTimeout(() => {
-          this.sendToUser(userId, 'booking_expiring', {
-            bookingId,
-            minutesLeft: minute
-          });
-        }, notifyAt.getTime() - Date.now());
-      }
+    this.bookingTimers.get(userId)?.delete(bookingId);
+  }, expiresAt.getTime() - Date.now());
+  
+  allTimers.push(expirationTimer);
+  
+  this.bookingTimers.get(userId)?.set(bookingId, allTimers);
+  
+  this.sendToUser(userId, 'booking_reserved', {
+    bookingId,
+    expiresAt: expiresAt.toISOString()
+  });
+  
+  return true;
+}
+
+  public stopBookingTimer(userId: string, bookingId: string): boolean {
+    if (!this.bookingTimers.has(userId)) {
+      return false;
     }
     
-    return true;
+    const userTimers = this.bookingTimers.get(userId);
+    if (!userTimers || !userTimers.has(bookingId)) {
+      return false;
+    }
+    
+    const timers = userTimers.get(bookingId);
+    if (timers && timers.length > 0) {
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+      
+      userTimers.delete(bookingId);
+      
+      this.sendToUser(userId, 'booking_timer_stopped', {
+        bookingId,
+        timestamp: Date.now()
+      });
+      
+      return true;
+    }
+    
+    return false;
   }
 
   private async handleChatMessage(senderId: string, data: any, socket: Socket): Promise<void> {
     try {
+      console.log('SocketService.handleChatMessage called with:', {senderId, data});
+      
       if (!data.receiverId || !data.content) {
         socket.emit('error', {
           message: 'receiverId and content are required'
@@ -243,11 +296,25 @@ export class SocketService {
         return;
       }
       
-      const MessageService = require('../services/message.service').MessageService;
-      const messageService = new MessageService();
+      // Import User model để kiểm tra role
+      const User = require('../models/user.model').User;
+      // Import chatService thay vì MessageService
+      const chatService = require('../services/chat.service').default;
       
-      const senderIsAdmin = await messageService.isUserAdmin(senderId);
-      const receiverIsAdmin = await messageService.isUserAdmin(data.receiverId);
+      // Xác định ai là user/admin
+      const user = await User.findById(senderId);
+      const receiver = await User.findById(data.receiverId);
+      
+      if (!user || !receiver) {
+        socket.emit('error', {
+          message: 'User or receiver not found'
+        });
+        return;
+      }
+      
+      // Xác định chính xác vai trò
+      const senderIsAdmin = user.role === 'admin';
+      const receiverIsAdmin = receiver.role === 'admin';
       
       if ((senderIsAdmin && receiverIsAdmin) || (!senderIsAdmin && !receiverIsAdmin)) {
         socket.emit('error', {
@@ -256,12 +323,24 @@ export class SocketService {
         return;
       }
       
-      const message = await messageService.sendMessage(
-        senderId,
-        data.receiverId,
+      // Xác định userId và adminId dựa vào role
+      const userId = senderIsAdmin ? data.receiverId : senderId;
+      const adminId = senderIsAdmin ? senderId : data.receiverId;
+      
+      // Lấy hoặc tạo conversation
+      const conversation = await chatService.getOrCreateConversation(userId, adminId);
+      
+      // Xác định sender role
+      const sender = senderIsAdmin ? 'admin' : 'user';
+      
+      // Gửi tin nhắn sử dụng chatService
+      const message = await chatService.sendMessage(
+        conversation._id.toString(),
+        sender,
         data.content
       );
       
+      // Gửi tin nhắn đến người nhận
       this.sendToUser(data.receiverId, 'new_message', {
         message: {
           _id: message._id,
@@ -271,18 +350,21 @@ export class SocketService {
           userId: message.userId,
           adminId: message.adminId,
           isRead: message.isRead,
+          conversationId: message.conversationId
         }
       });
       
+      // Thông báo cho người gửi
       socket.emit('message_sent', {
         messageId: message._id,
         receiverId: data.receiverId,
         timestamp: Date.now()
       });
-    } catch (error) {
-      console.error('Error handling chat message:', error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error handling chat message:', errorMessage);
       socket.emit('error', {
-        message: 'Failed to send message'
+        message: 'Failed to send message: ' + errorMessage
       });
     }
   }
@@ -293,21 +375,47 @@ export class SocketService {
         return;
       }
       
-      const MessageService = require('../services/message.service').MessageService;
-      const messageService = new MessageService();
+      // Import Message model
+      const Message = require('../models/message.model').Message;
+      // Import chatService
+      const chatService = require('../services/chat.service').default;
       
-      const message = await messageService.markAsRead(data.messageId, userId);
+      // Tìm message để lấy thông tin conversationId
+      const message = await Message.findById(data.messageId);
       
-      if (message) {
-        const notifyUserId = message.sender === "user" ? message.adminId.toString() : message.userId.toString();
-        
-        this.sendToUser(notifyUserId, 'message_read', {
-          messageId: data.messageId,
-          timestamp: Date.now()
-        });
+      if (!message) {
+        console.error('Message not found:', data.messageId);
+        return;
       }
-    } catch (error) {
-      console.error('Error handling message read:', error);
+      
+      // Lấy thông tin user
+      const User = require('../models/user.model').User;
+      const user = await User.findById(userId);
+      
+      if (!user) {
+        console.error('User not found:', userId);
+        return;
+      }
+      
+      // Xác định role của người đọc
+      const userRole = user.role === 'admin' ? 'admin' : 'user';
+      
+      // Đánh dấu tất cả tin nhắn đã đọc trong conversation
+      await chatService.markConversationAsRead(message.conversationId.toString(), userRole);
+      
+      // Xác định người nhận thông báo (người gửi tin nhắn)
+      const notifyUserId = message.sender === "user" ? message.adminId.toString() : message.userId.toString();
+      
+      // Gửi thông báo đã đọc
+      this.sendToUser(notifyUserId, 'message_read', {
+        messageId: data.messageId,
+        conversationId: message.conversationId.toString(),
+        reader: userRole,
+        timestamp: Date.now()
+      });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error handling message read:', errorMessage);
     }
   }
 }

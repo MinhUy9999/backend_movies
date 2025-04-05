@@ -1,10 +1,11 @@
+import { Socket } from 'socket.io';
 import { Request, Response } from "express";
 import { HTTP_STATUS_CODES } from "../httpStatus/httpStatusCode";
 import { isValidEmail, isValidPhoneNumber, isValidPassword, isValidDateOfBirth } from "../utils/validation";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
 import { UserService } from "../services/user.service";
 import { responseSend } from "../config/response";
-import webSocketManager from "../patterns/singleton/WebSocketManager";
+
 import { User } from "../models/user.model";
 
 const userService = new UserService();

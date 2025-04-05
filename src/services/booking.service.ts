@@ -9,7 +9,6 @@ import { TicketFactory } from '../patterns/factory/TicketFactory';
 import { PaymentProcessor } from '../patterns/strategy/PaymentStrategy';
 import { NotificationService, NotificationData } from '../patterns/observer/NotificationSystem';
 import { UserService } from './user.service';
-import webSocketManager from '../patterns/singleton/WebSocketManager';
 import socketService from '../socket/socket.service';
 
 interface BookingRequest {
@@ -171,7 +170,7 @@ export class BookingService {
             ? booking.userId.toString()
             : String(booking.userId);
             
-          webSocketManager.stopBookingTimer(userId, bookingId);
+            socketService.stopBookingTimer(userId, bookingId);
         }
       } catch (wsError) {
         console.error('WebSocket Error:', wsError);
@@ -194,7 +193,7 @@ export class BookingService {
             ? booking.showtimeId.toString()
             : String(booking.showtimeId);
             
-          webSocketManager.notifySeatsUpdated(showtimeId);
+            socketService.notifySeatsUpdated(showtimeId);
         }
       } catch (wsError) {
         console.error('WebSocket Error:', wsError);
@@ -283,7 +282,7 @@ export class BookingService {
 
     // Stop the WebSocket booking timer
     try {
-      webSocketManager.stopBookingTimer(userId, bookingId);
+      socketService.stopBookingTimer(userId, bookingId);
     } catch (wsError) {
       console.error('WebSocket Error:', wsError);
     }
@@ -301,7 +300,7 @@ export class BookingService {
           ? booking.showtimeId.toString()
           : String(booking.showtimeId);
           
-        webSocketManager.notifySeatsUpdated(showtimeId);
+          socketService.notifySeatsUpdated(showtimeId);
       }
     } catch (wsError) {
       console.error('WebSocket Error:', wsError);
