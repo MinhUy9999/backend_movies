@@ -14,19 +14,20 @@ export class ChatController {
         responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
         return;
       }
-
+  
       const { adminId } = req.params;
       
       if (req.user.role === 'admin') {
+        const conversation = await chatService.getOrCreateConversation(adminId, req.user.id);
         responseSend(
           res, 
-          null, 
-          "Admin cannot initiate conversation with users", 
-          HTTP_STATUS_CODES.BAD_REQUEST
+          { conversation }, 
+          "Conversation retrieved successfully", 
+          HTTP_STATUS_CODES.OK
         );
         return;
       }
-
+  
       const conversation = await chatService.getOrCreateConversation(req.user.id, adminId);
       
       responseSend(
