@@ -1,4 +1,3 @@
-// File định tuyến các endpoint liên quan đến người dùng
 import express, { Request, Response } from "express";
 import { UserController } from "../controllers/user.controller";
 import { authenticateToken, authorizeRoles } from "../middlewares/auth.middleware";
@@ -26,19 +25,12 @@ userRoutes.post("/logout", (req: Request, res: Response) => {
     res.json({ message: "Logout successful" });
 });
 
-// Endpoint gửi email quên mật khẩu
 userRoutes.post("/forgot-password", (req: Request, res: Response) => {
     UserController.forgotPassword(req, res);
 });
 
-// Endpoint đặt lại mật khẩu
 userRoutes.post("/reset-password", (req: Request, res: Response) => {
     UserController.resetPassword(req, res);
-});
-
-// Get WebSocket token for real-time features
-userRoutes.get("/ws-token", authenticateToken, (req: Request, res: Response) => {
-    UserController.getWebSocketToken(req, res);
 });
 
 userRoutes.get("/:id", UserController.getUserById);  

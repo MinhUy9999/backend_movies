@@ -10,6 +10,7 @@ import { PaymentProcessor } from '../patterns/strategy/PaymentStrategy';
 import { NotificationService, NotificationData } from '../patterns/observer/NotificationSystem';
 import { UserService } from './user.service';
 import webSocketManager from '../patterns/singleton/WebSocketManager';
+import socketService from '../socket/socket.service';
 
 interface BookingRequest {
   userId: string;
@@ -42,7 +43,6 @@ export class BookingService {
     session.startTransaction();
 
     try {
-      // Verify showtime exists and is active
       const showtime = await this.showtimeRepository.findById(bookingRequest.showtimeId);
       if (!showtime) {
         throw new Error('Showtime not found');
@@ -51,12 +51,10 @@ export class BookingService {
         throw new Error('This showtime is no longer available');
       }
 
-      // Check if start time has passed
       if (new Date(showtime.startTime) < new Date()) {
         throw new Error('This showtime has already started');
       }
 
-      // Check if seats are available - using Seat model directly instead of SeatReservation
       const seatAvailability = await Seat.find({
         _id: { $in: bookingRequest.seatIds },
         showtimeId: bookingRequest.showtimeId,
@@ -70,11 +68,9 @@ export class BookingService {
       // Calculate total amount
       let totalAmount = 0;
       for (const seatId of bookingRequest.seatIds) {
-        // Get seat type (would need to query seat details in a real implementation)
         const seatData = await Seat.findById(seatId);
         const seatType = seatData ? seatData.seatType : 'standard';
         
-        // Use Factory Pattern to create appropriate ticket
         const ticket = TicketFactory.createTicket(
           seatType, 
           showtime.price[seatType as keyof typeof showtime.price]
@@ -83,7 +79,6 @@ export class BookingService {
         totalAmount += ticket.price;
       }
 
-      // Create a new booking with pending payment status
       const booking = await this.bookingRepository.create({
         userId: new mongoose.Types.ObjectId(bookingRequest.userId),
         showtimeId: new mongoose.Types.ObjectId(bookingRequest.showtimeId),
@@ -97,22 +92,19 @@ export class BookingService {
 
       await session.commitTransaction();
 
-      // Start WebSocket booking timer
       try {
         if (booking && booking._id) {
           const bookingId: string = typeof booking._id === 'object' 
             ? booking._id.toString() 
             : String(booking._id);
             
-          webSocketManager.startBookingTimer(bookingRequest.userId, bookingId);
-          webSocketManager.notifySeatsUpdated(bookingRequest.showtimeId);
+            socketService.startBookingTimer(bookingRequest.userId, bookingId);
+            socketService.notifySeatsUpdated(bookingRequest.showtimeId);
         }
       } catch (wsError) {
         console.error('WebSocket Error:', wsError);
-        // Don't fail the operation if WebSocket notification fails
       }
 
-      // Send notification
       const user = await this.userService.getUserById(bookingRequest.userId);
       if (user) {
         const bookingId: string = booking && booking._id 
@@ -354,8 +346,6 @@ export class BookingService {
       throw new Error('Booking not found');
     }
 
-    // Security check: Ensure the user owns this booking or is an admin
-    // In a real app, you'd check user roles
     if (booking.userId.toString() !== userId) {
       throw new Error('Unauthorized: You cannot view this booking');
     }

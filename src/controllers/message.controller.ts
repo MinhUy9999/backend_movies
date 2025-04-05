@@ -1,9 +1,8 @@
-// src/controllers/message.controller.ts
 import { Request, Response } from "express";
 import { HTTP_STATUS_CODES } from "../httpStatus/httpStatusCode";
 import { MessageService } from "../services/message.service";
 import { responseSend } from "../config/response";
-import webSocketManager from "../patterns/singleton/WebSocketManager";
+import socketService from "../socket/socket.service";
 
 interface AuthRequest extends Request {
   user?: any;
@@ -66,34 +65,32 @@ export class MessageController {
       
       const message = await messageService.sendMessage(req.user.id, receiverId, content);
       
-      const messageForWs = {
+      // Lấy các ID từ message đúng với cấu trúc IMessage
+      let userId, adminId;
+      if (message.sender === 'user') {
+        userId = message.conversationId ? message.conversationId.toString() : "";
+        adminId = receiverId;
+      } else {
+        adminId = message.conversationId ? message.conversationId.toString() : "";
+        userId = receiverId;
+      }
+      
+      const messageForSocket = {
         _id: message._id ? message._id.toString() : "",
         sender: message.sender || "",
         content: message.content || "",
         createdAt: message.createdAt || new Date(),
-        userId: message.userId ? message.userId.toString() : "",
-        adminId: message.adminId ? message.adminId.toString() : "",
+        userId: userId,
+        adminId: adminId,
         isRead: message.isRead || false
       };
       
-      // Determine sender and receiver IDs based on sender role
-      const senderIdStr = messageForWs.sender === 'admin' ? 
-        messageForWs.adminId : messageForWs.userId;
-      const receiverIdStr = messageForWs.sender === 'admin' ? 
-        messageForWs.userId : messageForWs.adminId;
-      
-      console.log(`[MessageController] Message created. Sender: ${senderIdStr}, Receiver: ${receiverIdStr}`);
+      // Determine receiver ID based on sender role
+      const receiverIdStr = message.sender === 'admin' ? userId : adminId;
       
       // Send to receiver
-      webSocketManager.sendToUser(receiverIdStr, {
-        type: 'new_message',
-        message: messageForWs
-      });
-      
-      // Send to sender (confirmation)
-      webSocketManager.sendToUser(senderIdStr, {
-        type: 'new_message',
-        message: messageForWs
+      socketService.sendToUser(receiverIdStr, 'new_message', {
+        message: messageForSocket
       });
       
       responseSend(res, { message }, "Message sent successfully", HTTP_STATUS_CODES.CREATED);
@@ -119,10 +116,14 @@ export class MessageController {
         return;
       }
       
-      webSocketManager.sendToUser(message.sender.toString(), {
-        type: 'message_read',
-        messageId
-      });
+      // Lấy id người nhận thông báo từ message service
+      const notifyUserId = await messageService.getRecipientId(message, req.user.id);
+      
+      if (notifyUserId) {
+        socketService.sendToUser(notifyUserId, 'message_read', {
+          messageId
+        });
+      }
       
       responseSend(res, { message }, "Message marked as read", HTTP_STATUS_CODES.OK);
     } catch (error: any) {

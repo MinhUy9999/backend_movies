@@ -1,4 +1,3 @@
-// Cập nhật src/routes/index.routes.ts
 import { Router } from "express";
 import userRoutes from "./user.routes";
 import adminRoutes from "./admin.routes";
@@ -8,7 +7,7 @@ import bookingRoutes from "./booking.routes";
 import theaterRoutes from "./theater.routes";
 import screenRoutes from "./screen.routes";
 import seatRoutes from "./seat.routes";
-import messageRoutes from "./message.routes"; 
+import chatRoutes from "./chat.routes"; 
 
 const router = Router();
 
@@ -20,6 +19,6 @@ router.use("/showtimes", showtimeRoutes);
 router.use("/bookings", bookingRoutes);
 router.use("/theaters", theaterRoutes);
 router.use("/screens", screenRoutes);
-router.use("/messages", messageRoutes); 
+router.use("/chat", chatRoutes); 
 
 export default router;

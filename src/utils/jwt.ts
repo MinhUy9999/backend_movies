@@ -1,11 +1,8 @@
 import jwt from "jsonwebtoken";
 
-// Load cấu hình từ biến môi trường
 const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET as string;
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET as string;
-const WS_TOKEN_SECRET = process.env.WS_TOKEN_SECRET || ACCESS_TOKEN_SECRET; // Nếu không có secret riêng, dùng ACCESS_TOKEN_SECRET
 
-// Kiểm tra xem có thiếu cấu hình không
 if (!ACCESS_TOKEN_SECRET || !REFRESH_TOKEN_SECRET) {
     throw new Error("Missing JWT secrets in .env file");
 }
@@ -29,15 +26,6 @@ export const generateRefreshToken = (user: { id: string; username: string; email
 };
 
 /**
- * Tạo token WebSocket
- * @param user Thông tin người dùng
- * @returns WebSocket token
- */
-export const generateWebSocketToken = (user: { id: string; username: string; email: string; role: string }) => {
-    return jwt.sign(user, WS_TOKEN_SECRET, { expiresIn: "24h" });
-};
-
-/**
  * Xác thực access token
  * @param token Access token cần xác thực
  * @returns Dữ liệu đã giải mã hoặc null nếu không hợp lệ
@@ -58,19 +46,6 @@ export const verifyAccessToken = (token: string) => {
 export const verifyRefreshToken = (token: string) => {
     try {
         return jwt.verify(token, REFRESH_TOKEN_SECRET);
-    } catch (error) {
-        return null;
-    }
-};
-
-/**
- * Xác thực WebSocket token
- * @param token WebSocket token cần xác thực
- * @returns Dữ liệu đã giải mã hoặc null nếu không hợp lệ
- */
-export const verifyWebSocketToken = (token: string) => {
-    try {
-        return jwt.verify(token, WS_TOKEN_SECRET);
     } catch (error) {
         return null;
     }

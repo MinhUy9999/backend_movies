@@ -1,5 +1,7 @@
 import { Message, IMessage } from "../models/message.model";
 import { User } from "../models/user.model";
+import { Conversation, IConversation  } from "../models/conversation.model";
+import mongoose from "mongoose";
 
 interface UserConversation {
   user: any;
@@ -235,5 +237,20 @@ export class MessageService {
   
   async getAllAdmins(): Promise<any[]> {
     return await User.find({ role: "admin" }, 'username avatar');
+  }
+
+  async getRecipientId(message: IMessage, currentUserId: string): Promise<string | null> {
+    try {
+      const messageId = message._id as mongoose.Types.ObjectId | string;
+      
+      if (message.sender === "user") {
+        return message.adminId.toString();
+      } else {
+        return message.userId.toString();
+      }
+    } catch (error) {
+      console.error('Error getting recipient ID:', error);
+      return null;
+    }
   }
 }

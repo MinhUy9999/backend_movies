@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 import { HTTP_STATUS_CODES } from "../httpStatus/httpStatusCode";
 import { isValidEmail, isValidPhoneNumber, isValidPassword, isValidDateOfBirth } from "../utils/validation";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../utils/jwt";
-import { generateWebSocketToken } from "../middlewares/auth.middleware";
 import { UserService } from "../services/user.service";
 import { responseSend } from "../config/response";
 import webSocketManager from "../patterns/singleton/WebSocketManager";
@@ -190,59 +189,35 @@ export class UserController {
         }
     }
 
-    static async getWebSocketToken(req: AuthRequest, res: Response) {
+    static async getOnlineUsers(req: AuthRequest, res: Response): Promise<void> {
         try {
-            if (!req.user || !req.user.id) {
-                return responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
+            if (!req.user) {
+                responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
+                return;
             }
-
-            const wsToken = generateWebSocketToken(req.user.id);
+            
+            const socketService = require('../socket/socket.service').default;
+            const onlineUserIds = socketService.getOnlineUserIds();
+            
+            const onlineUsers = await User.find(
+                { _id: { $in: onlineUserIds } },
+                'username email avatar'
+            );
             
             responseSend(
-                res, 
-                { wsToken }, 
-                "WebSocket token generated successfully", 
+                res,
+                { onlineUsers },
+                "Online users fetched successfully",
                 HTTP_STATUS_CODES.OK
             );
         } catch (error: any) {
-            console.error("Error generating WebSocket token:", error.message);
+            console.error("Error fetching online users:", error.message);
             responseSend(
-                res, 
-                null, 
-                error.message || "Error generating WebSocket token", 
+                res,
+                null,
+                error.message || "Error fetching online users",
                 HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR
             );
-        }
-    }
-
-    static async getOnlineUsers(req: AuthRequest, res: Response): Promise<void> {
-        try {
-          if (!req.user) {
-            responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
-            return;
-          }
-          
-          const onlineUserIds = Array.from(webSocketManager.getOnlineUserIds());
-          
-          const onlineUsers = await User.find(
-            { _id: { $in: onlineUserIds } },
-            'username email avatar'
-          );
-          
-          responseSend(
-            res,
-            { onlineUsers },
-            "Online users fetched successfully",
-            HTTP_STATUS_CODES.OK
-          );
-        } catch (error: any) {
-          console.error("Error fetching online users:", error.message);
-          responseSend(
-            res,
-            null,
-            error.message || "Error fetching online users",
-            HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR
-          );
         }
     }
 }
