@@ -1,8 +1,34 @@
 // src/patterns/singleton/SocketIOManager.ts
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, Socket } from 'socket.io';
 import http from 'http';
 import { verifyAccessToken } from '../../utils/jwt';
 import { ChatService } from '../../services/chat.service';
+
+// Define types for the socket events
+interface SendMessageData {
+  conversationId: string;
+  content: string;
+}
+
+interface MarkReadData {
+  messageId: string;
+}
+
+interface MarkAllReadData {
+  conversationId: string;
+}
+
+interface TypingData {
+  conversationId: string;
+  isTyping?: boolean;
+}
+
+interface CallbackResponse {
+  success: boolean;
+  error?: string;
+  message?: any;
+  count?: number;
+}
 
 export class SocketIOManager {
   private static instance: SocketIOManager;
@@ -66,7 +92,7 @@ export class SocketIOManager {
       }
     });
     
-    this.io.on('connection', (socket) => {
+    this.io.on('connection', (socket: Socket) => {
       const userId = socket.data.user.id;
       
       console.log(`[Socket.IO] User connected: ${userId}`);
@@ -107,12 +133,12 @@ export class SocketIOManager {
     console.log(`[Socket.IO] Socket unregistered for user ${userId}: ${socketId}`);
   }
   
-  private setupSocketEvents(socket: any): void {
+  private setupSocketEvents(socket: Socket): void {
     const userId = socket.data.user.id;
     const chatService = new ChatService();
     
     // Xử lý gửi tin nhắn
-    socket.on('send_message', async (data, callback) => {
+    socket.on('send_message', async (data: SendMessageData, callback: (response: CallbackResponse) => void) => {
       try {
         const { conversationId, content } = data;
         
@@ -161,7 +187,7 @@ export class SocketIOManager {
     });
     
     // Xử lý đánh dấu đã đọc
-    socket.on('mark_read', async (data, callback) => {
+    socket.on('mark_read', async (data: MarkReadData, callback: (response: CallbackResponse) => void) => {
       try {
         const { messageId } = data;
         
@@ -198,7 +224,7 @@ export class SocketIOManager {
     });
     
     // Xử lý đánh dấu đã đọc tất cả
-    socket.on('mark_all_read', async (data, callback) => {
+    socket.on('mark_all_read', async (data: MarkAllReadData, callback: (response: CallbackResponse) => void) => {
       try {
         const { conversationId } = data;
         
@@ -238,7 +264,7 @@ export class SocketIOManager {
     });
     
     // Xử lý "đang gõ"
-    socket.on('typing', async (data) => {
+    socket.on('typing', async (data: TypingData) => {
       try {
         const { conversationId, isTyping } = data;
         
