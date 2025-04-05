@@ -1,11 +1,11 @@
 import { Seat, ISeat } from "../models/seat.model";
-import webSocketManager from "../patterns/singleton/WebSocketManager";
+import socketService from "../socket/socket.service";
 
 export class SeatService {
     static async getAllSeats(): Promise<ISeat[]> {
         return await Seat.find();
     }
-    // Thêm phương thức này vào SeatService
+    
     static async getSeatsByShowtime(showtimeId: string): Promise<ISeat[]> {
         return await Seat.find({ showtimeId }).sort({ row: 1, seatNumber: 1 });
     }
@@ -21,9 +21,8 @@ export class SeatService {
     static async updateSeat(id: string, data: Partial<ISeat>): Promise<ISeat | null> {
         const updatedSeat = await Seat.findByIdAndUpdate(id, data, { new: true });
 
-        // If seat is updated and has showtimeId, notify via WebSocket
         if (updatedSeat && updatedSeat.showtimeId) {
-            webSocketManager.notifySeatsUpdated(updatedSeat.showtimeId.toString());
+            socketService.notifySeatsUpdated(updatedSeat.showtimeId.toString());
         }
 
         return updatedSeat;
@@ -45,12 +44,11 @@ export class SeatService {
         }
 
         seat.status = 'reserved';
-        seat.expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15-minute reservation
+        seat.expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
         const updatedSeat = await seat.save();
 
-        // Notify via WebSocket about seats update
-        webSocketManager.notifySeatsUpdated(showtimeId);
+        socketService.notifySeatsUpdated(showtimeId);
 
         return updatedSeat;
     }
@@ -67,8 +65,8 @@ export class SeatService {
         );
 
         if (seat) {
-            // Notify via WebSocket about seats update
-            webSocketManager.notifySeatsUpdated(showtimeId);
+            // Notify via Socket.io about seats update
+            socketService.notifySeatsUpdated(showtimeId);
         }
 
         return seat;
@@ -85,8 +83,8 @@ export class SeatService {
         );
 
         if (seat) {
-            // Notify via WebSocket about seats update
-            webSocketManager.notifySeatsUpdated(showtimeId);
+            // Notify via Socket.io about seats update
+            socketService.notifySeatsUpdated(showtimeId);
         }
 
         return seat;
@@ -110,8 +108,8 @@ export class SeatService {
             );
 
             if (seat.showtimeId) {
-                // Notify via WebSocket about seats update
-                webSocketManager.notifySeatsUpdated(seat.showtimeId.toString());
+                // Notify via Socket.io about seats update
+                socketService.notifySeatsUpdated(seat.showtimeId.toString());
             }
         }
     }

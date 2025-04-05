@@ -7,14 +7,14 @@ import { notificationService } from "./patterns/observer/NotificationSystem";
 import { EmailNotification, SMSNotification, PushNotification } from "./patterns/observer/NotificationSystem";
 import path from "path";
 import http from "http";
-import webSocketManager from "./patterns/singleton/WebSocketManager";
+import socketService from "./socket/socket.service";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const server = http.createServer(app);
 
-webSocketManager.initialize(server);
+socketService.initialize(server);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -59,14 +59,8 @@ db.connect()
     server.listen(Number(PORT), () => {
       console.log(`🚀 Server is running on PORT: ${PORT}`);
       console.log(`💚 Health check available at http://localhost:${PORT}/health`);
-      console.log(`🔌 WebSocket server is active`);
+      console.log(`🔌 Socket.io server is active`);
     });
-
-    // server.listen((PORT), () => {
-    //   console.log(`🚀 Server is running on PORT: ${PORT} and hostname: 0.0.0.0`);
-    //   console.log(`💚 Health check available at http://localhost:${PORT}/health`);
-    //   console.log(`🔌 WebSocket server is active`);
-    // });
   })
   .catch((error) => {
     console.error("Failed to start server:", error);

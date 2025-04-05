@@ -3,7 +3,6 @@
 import { IMovie } from '../models/movie.model';
 import { MovieRepository } from '../patterns/repository/MovieRepository';
 import { ShowtimeRepository } from '../patterns/repository/ShowtimeRepository';
-import webSocketManager from '../patterns/singleton/WebSocketManager'; // Import WebSocketManager singleton instance
 
 export class MovieService {
   private movieRepository: MovieRepository;

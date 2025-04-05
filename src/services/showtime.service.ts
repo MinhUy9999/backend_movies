@@ -1,10 +1,8 @@
-// Service Layer Pattern for Showtime Business Logic
-
 import { IShowtime } from '../models/showtime.model';
 import { ShowtimeRepository } from '../patterns/repository/ShowtimeRepository';
 import { MovieRepository } from '../patterns/repository/MovieRepository';
-import { Seat, ISeat } from '../models/seat.model'; // Changed from SeatReservation
-import webSocketManager from '../patterns/singleton/WebSocketManager'; // Import WebSocketManager singleton instance
+import { Seat, ISeat } from '../models/seat.model'; 
+import socketService from '../socket/socket.service';
 
 export class ShowtimeService {
   private showtimeRepository: ShowtimeRepository;
@@ -39,13 +37,11 @@ export class ShowtimeService {
   }
 
   async createShowtime(showtimeData: Partial<IShowtime>): Promise<IShowtime> {
-    // Validate required fields
     if (!showtimeData.movieId || !showtimeData.screenId || 
         !showtimeData.startTime || !showtimeData.price) {
       throw new Error('Missing required showtime information');
     }
 
-    // Validate movie exists and is active
     const movie = await this.movieRepository.findById(showtimeData.movieId.toString());
     if (!movie) {
       throw new Error('Movie not found');
@@ -54,17 +50,14 @@ export class ShowtimeService {
       throw new Error('Cannot create showtime for inactive movie');
     }
 
-    // Calculate end time based on movie duration
     const startTime = new Date(showtimeData.startTime);
     const endTime = new Date(startTime);
-    endTime.setMinutes(startTime.getMinutes() + movie.duration + 30); // Add 30 minutes for ads/trailers/cleaning
+    endTime.setMinutes(startTime.getMinutes() + movie.duration + 30); 
     
     showtimeData.endTime = endTime;
 
-    // Create the showtime
     const newShowtime = await this.showtimeRepository.create(showtimeData);
 
-    // Initialize seat availability for this showtime
     if (newShowtime._id) {
       await this.initializeSeatAvailability(newShowtime._id.toString(), showtimeData.screenId.toString());
     }
@@ -73,13 +66,11 @@ export class ShowtimeService {
   }
 
   async updateShowtime(id: string, showtimeData: Partial<IShowtime>): Promise<IShowtime | null> {
-    // Validate showtime exists
     const existingShowtime = await this.showtimeRepository.findById(id);
     if (!existingShowtime) {
       throw new Error('Showtime not found');
     }
 
-    // If updating the movie, recalculate end time
     if (showtimeData.movieId) {
       const movie = await this.movieRepository.findById(showtimeData.movieId.toString());
       if (!movie) {
@@ -95,7 +86,6 @@ export class ShowtimeService {
       
       showtimeData.endTime = endTime;
     } else if (showtimeData.startTime) {
-      // If just updating start time, recalculate end time based on existing movie
       const movie = await this.movieRepository.findById(existingShowtime.movieId.toString());
       if (movie) {
         const startTime = new Date(showtimeData.startTime);
@@ -110,37 +100,31 @@ export class ShowtimeService {
   }
 
   async deleteShowtime(id: string): Promise<boolean> {
-    // Check if there are bookings for this showtime
     const bookedSeats = await Seat.find({ 
       showtimeId: id,
       status: { $in: ['reserved', 'booked'] }
     });
 
     if (bookedSeats.length > 0) {
-      // If there are bookings, don't allow deletion - just mark inactive
       await this.showtimeRepository.update(id, { isActive: false });
       return true;
     }
 
-    // Otherwise actually delete
     return await this.showtimeRepository.delete(id);
   }
 
   async getShowtimeSeats(showtimeId: string): Promise<any[]> {
-    // Get the showtime
     const showtime = await this.showtimeRepository.findById(showtimeId);
     if (!showtime) {
       throw new Error('Showtime not found');
     }
 
-    // Get all seats for the screen with their status for this showtime
     const seats = await Seat.find({ 
       screenId: showtime.screenId,
       showtimeId: showtimeId,
       isActive: true 
     }).sort({ row: 1, seatNumber: 1 });
 
-    // Organize seats by row
     const seatsByRow: { [key: string]: any[] } = {};
     seats.forEach(seat => {
       if (!seatsByRow[seat.row]) {
@@ -157,7 +141,6 @@ export class ShowtimeService {
       });
     });
 
-    // Convert to array and sort by row
     return Object.keys(seatsByRow)
       .sort()
       .map(row => ({
@@ -166,12 +149,9 @@ export class ShowtimeService {
       }));
   }
 
-  // Helper method to initialize seat availability for a new showtime
   private async initializeSeatAvailability(showtimeId: string, screenId: string): Promise<void> {
-    // Get all seats for the screen
     const screenSeats = await Seat.find({ screenId, isActive: true });
 
-    // Create copies of these seats for this specific showtime
     const showtimeSeats = screenSeats.map(screenSeat => {
       return {
         screenId: screenSeat.screenId,
@@ -184,7 +164,6 @@ export class ShowtimeService {
       };
     });
 
-    // Bulk insert all seats for this showtime
     if (showtimeSeats.length > 0) {
       await Seat.insertMany(showtimeSeats);
     }

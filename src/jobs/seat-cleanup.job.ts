@@ -1,8 +1,6 @@
-// src/jobs/seat-cleanup.job.ts
 import { SeatService } from '../services/seat.service';
 
 /**
- * Công việc dọn dẹp ghế ngồi hết hạn.
  * Giải phóng các ghế được đặt tạm thời nhưng đã quá thời gian hết hạn (15 phút).
  */
 export class SeatCleanupJob {
@@ -57,5 +55,4 @@ export class SeatCleanupJob {
   }
 }
 
-// Export singleton instance
 export const seatCleanupJob = new SeatCleanupJob();
