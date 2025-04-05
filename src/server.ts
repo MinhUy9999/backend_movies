@@ -19,7 +19,7 @@ webSocketManager.initialize(server);
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://your-frontend-domain.com'], // Thêm frontend URL sau khi deploy
+  origin: ['http://localhost:3000', 'http://localhost:5173', 'https://frontend-movies-xo0l.onrender.com'],
   credentials: true
 }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
