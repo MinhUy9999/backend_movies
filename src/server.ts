@@ -1,4 +1,3 @@
-// src/server.ts
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -8,15 +7,14 @@ import { notificationService } from "./patterns/observer/NotificationSystem";
 import { EmailNotification, SMSNotification, PushNotification } from "./patterns/observer/NotificationSystem";
 import path from "path";
 import http from "http";
-import socketIOManager from "./patterns/singleton/SocketIOManager";
+import webSocketManager from "./patterns/singleton/WebSocketManager";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 const server = http.createServer(app);
 
-// Khởi tạo Socket.IO thay vì WebSocket
-socketIOManager.initialize(server);
+webSocketManager.initialize(server);
 
 app.use(express.json());
 app.use(cookieParser());
@@ -61,7 +59,7 @@ db.connect()
     server.listen(Number(PORT), () => {
       console.log(`🚀 Server is running on PORT: ${PORT}`);
       console.log(`💚 Health check available at http://localhost:${PORT}/health`);
-      console.log(`🔌 Socket.IO server is active`);
+      console.log(`🔌 WebSocket server is active`);
     });
 
     // server.listen((PORT), () => {

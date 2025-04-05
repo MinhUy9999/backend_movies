@@ -42,12 +42,12 @@ export class BookingController {
         paymentDetails: {}, // Will be provided at payment processing step
       });
 
-      // responseSend(
-      //   res,
-      //   { booking },
-      //   "Booking created successfully",
-      //   HTTP_STATUS_CODES.CREATED
-      // );
+      responseSend(
+        res,
+        { booking },
+        "Booking created successfully",
+        HTTP_STATUS_CODES.CREATED
+      );
     } catch (error: any) {
       console.error("Error creating booking:", error.message);
       responseSend(
