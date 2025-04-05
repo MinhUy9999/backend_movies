@@ -53,6 +53,8 @@ export class ChatService {
     try {
       const message = new Message({
         conversationId,
+        userId: conversation.userId,    
+        adminId: conversation.adminId, 
         sender,
         content,
         isRead: false
@@ -91,7 +93,7 @@ export class ChatService {
     } finally {
       session.endSession();
     }
-  }
+}
 
   async markConversationAsRead(conversationId: string, userRole: 'user' | 'admin'): Promise<void> {
     const conversation = await Conversation.findById(conversationId);
@@ -157,9 +159,9 @@ export class ChatService {
   }
 
   async getAvailableAdmins(): Promise<any[]> {
-    return await User.find({ role: 'admin', isActive: true })
-      .select('username avatar')
-      .lean();
+    return await User.find({ 
+      role: 'admin', 
+    }).select('username avatar').lean();
   }
 
   private formatMessage(message: IMessage): any {

@@ -249,9 +249,9 @@ export class SocketService {
       const senderIsAdmin = await messageService.isUserAdmin(senderId);
       const receiverIsAdmin = await messageService.isUserAdmin(data.receiverId);
       
-      if (!senderIsAdmin && !receiverIsAdmin) {
+      if ((senderIsAdmin && receiverIsAdmin) || (!senderIsAdmin && !receiverIsAdmin)) {
         socket.emit('error', {
-          message: 'Regular users can only chat with admins'
+          message: 'Only user-admin conversations are allowed'
         });
         return;
       }
@@ -262,7 +262,6 @@ export class SocketService {
         data.content
       );
       
-      // Send to receiver
       this.sendToUser(data.receiverId, 'new_message', {
         message: {
           _id: message._id,
@@ -275,7 +274,6 @@ export class SocketService {
         }
       });
       
-      // Send confirmation to sender
       socket.emit('message_sent', {
         messageId: message._id,
         receiverId: data.receiverId,

@@ -109,7 +109,7 @@ export class ChatController {
         responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
         return;
       }
-
+  
       const { conversationId, content } = req.body;
       
       if (!conversationId || !content) {
@@ -123,7 +123,12 @@ export class ChatController {
       }
       
       const sender = req.user.role === 'admin' ? 'admin' : 'user';
-      const message = await chatService.sendMessage(conversationId, sender, content);
+      
+      const message = await chatService.sendMessage(
+        conversationId, 
+        sender, 
+        content
+      );
       
       responseSend(
         res, 
@@ -172,38 +177,28 @@ export class ChatController {
   }
 
   static async getAvailableAdmins(req: AuthRequest, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
-        return;
-      }
-
-      if (req.user.role === 'admin') {
-        responseSend(
-          res, 
-          { admins: [] }, 
-          "Admin users cannot chat with other admins", 
-          HTTP_STATUS_CODES.BAD_REQUEST
-        );
-        return;
-      }
-      
-      const admins = await chatService.getAvailableAdmins();
-      
-      responseSend(
-        res, 
-        { admins }, 
-        "Available admins retrieved successfully", 
-        HTTP_STATUS_CODES.OK
-      );
-    } catch (error: any) {
-      console.error("Error getting available admins:", error.message);
-      responseSend(
-        res, 
-        null, 
-        error.message || "Error getting available admins", 
-        HTTP_STATUS_CODES.INTERNAL_SERVER_ERROR
-      );
+    if (!req.user) {
+      responseSend(res, null, "Authentication required", HTTP_STATUS_CODES.UNAUTHORIZED);
+      return;
     }
+  
+    if (req.user.role !== 'user') {
+      responseSend(
+        res, 
+        { admins: [] }, 
+        "Only users can access admin list", 
+        HTTP_STATUS_CODES.BAD_REQUEST
+      );
+      return;
+    }
+    
+    const admins = await chatService.getAvailableAdmins();
+    
+    responseSend(
+      res, 
+      { admins }, 
+      "Available admins retrieved successfully", 
+      HTTP_STATUS_CODES.OK
+    );
   }
 }
