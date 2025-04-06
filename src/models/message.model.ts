@@ -4,6 +4,7 @@ export interface IMessage extends Document {
   conversationId: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;  
   adminId: mongoose.Types.ObjectId; 
+  senderId?: mongoose.Types.ObjectId;
   sender: "user" | "admin";       
   content: string;
   isRead: boolean;
@@ -15,6 +16,7 @@ const MessageSchema: Schema = new Schema({
   conversationId: { type: Schema.Types.ObjectId, ref: "Conversation", required: true },
   userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
   adminId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+  senderId: { type: Schema.Types.ObjectId, ref: "User" },
   sender: { type: String, enum: ["user", "admin"], required: true },
   content: { type: String, required: true },
   isRead: { type: Boolean, default: false }

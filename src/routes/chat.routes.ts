@@ -8,7 +8,7 @@ chatRoutes.use(authenticateToken);
 
 chatRoutes.get("/conversations", ChatController.getConversations);
 
-chatRoutes.get("/conversation/:adminId", ChatController.getOrCreateConversation);
+chatRoutes.get("/conversation/:targetId", ChatController.getOrCreateConversation);
 
 chatRoutes.get("/messages/:conversationId", ChatController.getMessages);
 

@@ -296,12 +296,9 @@ public startBookingTimer(userId: string, bookingId: string, expirationMinutes: n
         return;
       }
       
-      // Import User model để kiểm tra role
       const User = require('../models/user.model').User;
-      // Import chatService thay vì MessageService
       const chatService = require('../services/chat.service').default;
       
-      // Xác định ai là user/admin
       const user = await User.findById(senderId);
       const receiver = await User.findById(data.receiverId);
       
@@ -312,35 +309,30 @@ public startBookingTimer(userId: string, bookingId: string, expirationMinutes: n
         return;
       }
       
-      // Xác định chính xác vai trò
       const senderIsAdmin = user.role === 'admin';
       const receiverIsAdmin = receiver.role === 'admin';
+      const isAdminToAdmin = senderIsAdmin && receiverIsAdmin;
       
-      if ((senderIsAdmin && receiverIsAdmin) || (!senderIsAdmin && !receiverIsAdmin)) {
-        socket.emit('error', {
-          message: 'Only user-admin conversations are allowed'
-        });
-        return;
+      let conversation;
+      
+      if (isAdminToAdmin) {
+        conversation = await chatService.getOrCreateAdminChat(senderId, data.receiverId);
+      } else {
+        const userId = senderIsAdmin ? data.receiverId : senderId;
+        const adminId = senderIsAdmin ? senderId : data.receiverId;
+        
+        conversation = await chatService.getOrCreateConversation(userId, adminId);
       }
       
-      // Xác định userId và adminId dựa vào role
-      const userId = senderIsAdmin ? data.receiverId : senderId;
-      const adminId = senderIsAdmin ? senderId : data.receiverId;
-      
-      // Lấy hoặc tạo conversation
-      const conversation = await chatService.getOrCreateConversation(userId, adminId);
-      
-      // Xác định sender role
       const sender = senderIsAdmin ? 'admin' : 'user';
       
-      // Gửi tin nhắn sử dụng chatService
       const message = await chatService.sendMessage(
         conversation._id.toString(),
         sender,
-        data.content
+        data.content,
+        senderIsAdmin ? senderId : undefined
       );
       
-      // Gửi tin nhắn đến người nhận
       this.sendToUser(data.receiverId, 'new_message', {
         message: {
           _id: message._id,
@@ -354,7 +346,6 @@ public startBookingTimer(userId: string, bookingId: string, expirationMinutes: n
         }
       });
       
-      // Thông báo cho người gửi
       socket.emit('message_sent', {
         messageId: message._id,
         receiverId: data.receiverId,
